@@ -1,767 +1,432 @@
-import { EventEmitter } from 'eventemitter3';
-import { Decimal } from 'decimal.js';
-
-import { 
-  UserService, 
-  OrderService, 
-  DocumentService, 
-  CommunicationService 
-} from './services';
-
+import EventEmitter from 'eventemitter3';
+import { UserService } from './services/user-service';
+import { OrderService } from './services/order-service';
+import { DocumentService } from './services/document-service';
 import { AIService } from './services/ai-service';
-
+import { Decimal } from 'decimal.js';
 import { 
   IUser, 
   IOrder, 
-  IAct, 
   IDocument, 
-  IDiscussion, 
-  IMessage 
+  IAct
 } from './interfaces/base';
-
-import {
-  UserType,
-  OrderStatus,
-  MilestoneStatus,
-  DocumentType,
-  MessageType
-} from './utils/constants';
-
-import {
-  IDoRDocument,
-  IRoadmapDocument,
-  IDoDDocument,
-  IDoDComplianceResult
-} from './interfaces/services';
-
-/**
- * Events emitted by the EscrowManager
- */
-export enum EscrowEvents {
-  USER_CREATED = 'user:created',
-  USER_BALANCE_CHANGED = 'user:balance_changed',
-  
-  ORDER_CREATED = 'order:created',
-  ORDER_STATUS_CHANGED = 'order:status_changed',
-  ORDER_FUNDED = 'order:funded',
-  ORDER_REPRESENTATIVE_CHANGED = 'order:representative_changed',
-  
-  MILESTONE_COMPLETED = 'milestone:completed',
-  MILESTONE_PAID = 'milestone:paid',
-  
-  ACT_CREATED = 'act:created',
-  ACT_SIGNED = 'act:signed',
-  ACT_COMPLETED = 'act:completed',
-  
-  DOCUMENT_CREATED = 'document:created',
-  DOCUMENT_UPDATED = 'document:updated',
-  DOCUMENT_APPROVED = 'document:approved',
-  
-  DISCUSSION_CREATED = 'discussion:created',
-  MESSAGE_SENT = 'message:sent',
-  
-  DOR_GENERATED = 'dor:generated',
-  ROADMAP_GENERATED = 'roadmap:generated',
-  DOD_GENERATED = 'dod:generated',
-  DELIVERABLE_SUBMITTED = 'deliverable:submitted',
-  DELIVERABLE_VALIDATED = 'deliverable:validated'
-}
+import { 
+  DoRContent, 
+  RoadmapContent, 
+  DoDContent 
+} from './interfaces/DocumentInterfaces';
+import { UserType, OrderStatus, DocumentType, ActStatus } from './utils/constants';
 
 /**
  * Main class for managing escrow functionality
  */
-export class EscrowManager {
+export class EscrowManager extends EventEmitter {
   private userService: UserService;
   private orderService: OrderService;
   private documentService: DocumentService;
-  private communicationService: CommunicationService;
   private aiService: AIService | null = null;
-  private eventEmitter: EventEmitter;
-  
-  constructor(aiApiKey?: string) {
-    // Initialize services
+
+  /**
+   * Constructor for EscrowManager
+   * @param apiKey Optional Google Gemini API key for AI-powered features
+   */
+  constructor(apiKey?: string) {
+    super();
     this.userService = new UserService();
     this.orderService = new OrderService();
     this.documentService = new DocumentService();
-    this.communicationService = new CommunicationService();
     
-    // Initialize AI service if API key is provided
-    if (aiApiKey) {
+    if (apiKey) {
       this.aiService = new AIService();
-      this.aiService.setApiKey(aiApiKey);
     }
-    
-    // Set up cross-service dependencies
-    this.userService.setOrderService(this.orderService);
-    this.orderService.setUserService(this.userService);
-    this.documentService.setServices(this.orderService, this.userService, this.aiService || undefined);
-    this.communicationService.setServices(this.orderService, this.userService);
-    
-    // Initialize event emitter
-    this.eventEmitter = new EventEmitter();
   }
-  
-  /**
-   * Set Google Gemini API key for AI features
-   * @param apiKey Google Gemini API key
-   */
-  setAiApiKey(apiKey: string): void {
-    if (!this.aiService) {
-      this.aiService = new AIService();
-      this.documentService.setServices(this.orderService, this.userService, this.aiService);
-    }
-    
-    this.aiService.setApiKey(apiKey);
-  }
-  
-  /**
-   * Subscribe to events
-   * @param event Event type
-   * @param callback Callback function
-   * @returns Unsubscribe function
-   */
-  on(event: EscrowEvents, callback: (...args: any[]) => void): () => void {
-    this.eventEmitter.on(event, callback);
-    return () => this.eventEmitter.off(event, callback);
-  }
-  
-  /**
-   * Subscribe to an event for one time only
-   * @param event Event type
-   * @param callback Callback function
-   */
-  once(event: EscrowEvents, callback: (...args: any[]) => void): void {
-    this.eventEmitter.once(event, callback);
-  }
-  
-  /**
-   * Emit an event
-   * @param event Event type
-   * @param args Event arguments
-   */
-  private emit(event: EscrowEvents, ...args: any[]): void {
-    this.eventEmitter.emit(event, ...args);
-  }
-  
-  // User Management
-  
+
+  // User management methods
+
   /**
    * Create a new user
    * @param name User name
-   * @param userType User type
-   * @returns Created user
+   * @param type User type
+   * @returns Created user (IUser)
    */
-  async createUser(name: string, userType: UserType): Promise<IUser> {
-    const user = await this.userService.createUser(name, userType);
-    this.emit(EscrowEvents.USER_CREATED, user);
+  async createUser(name: string, type: UserType): Promise<IUser> {
+    const user = await this.userService.createUser(name, type);
+    this.emit('user:created', user);
     return user;
   }
-  
+
   /**
-   * Get a user by ID
+   * Get user by ID
    * @param userId User ID
-   * @returns User instance
+   * @returns User (IUser) or null if not found
    */
-  async getUser(userId: string): Promise<IUser> {
-    return this.userService.getUser(userId);
+  async getUser(userId: string): Promise<IUser | null> {
+    const user = await this.userService.getUser(userId);
+    return user ? user : null;
   }
-  
+
   /**
-   * Add funds to a user's balance
+   * Deposit funds to user's balance
    * @param userId User ID
    * @param amount Amount to deposit
-   * @returns New balance
+   * @returns Updated user (IUser)
    */
-  async deposit(userId: string, amount: number | string): Promise<Decimal> {
+  async deposit(userId: string, amount: string): Promise<IUser> {
     const decimalAmount = new Decimal(amount);
-    const newBalance = await this.userService.deposit(userId, decimalAmount);
-    this.emit(EscrowEvents.USER_BALANCE_CHANGED, { userId, amount: decimalAmount, balance: newBalance });
-    return newBalance;
+    await this.userService.deposit(userId, decimalAmount);
+    this.emit('user:deposit', { userId, amount });
+    
+    const updatedUser = await this.userService.getUser(userId);
+    if (!updatedUser) {
+      throw new Error(`User with ID ${userId} not found after deposit.`);
+    }
+    return updatedUser;
   }
-  
-  /**
-   * Withdraw funds from a user's balance
-   * @param userId User ID
-   * @param amount Amount to withdraw
-   * @returns New balance
-   */
-  async withdraw(userId: string, amount: number | string): Promise<Decimal> {
-    const decimalAmount = new Decimal(amount);
-    const newBalance = await this.userService.withdraw(userId, decimalAmount);
-    this.emit(EscrowEvents.USER_BALANCE_CHANGED, { userId, amount: decimalAmount.negated(), balance: newBalance });
-    return newBalance;
-  }
-  
-  /**
-   * Get orders associated with a user
-   * @param userId User ID
-   * @returns Array of orders
-   */
-  async getUserOrders(userId: string): Promise<IOrder[]> {
-    return this.userService.getUserOrders(userId);
-  }
-  
-  // Order Management
-  
+
+  // Order management methods
+
   /**
    * Create a new order
-   * @param creatorId Creator ID
+   * @param customerId Customer ID
    * @param title Order title
    * @param description Order description
-   * @param milestones Array of milestone data
-   * @returns Created order
+   * @param milestones List of milestones
+   * @returns Created order (IOrder)
    */
   async createOrder(
-    creatorId: string,
+    customerId: string,
     title: string,
     description: string,
-    milestones: { description: string; amount: number | string; deadline?: Date }[]
+    milestones: { description: string; amount: string; deadline?: Date }[]
   ): Promise<IOrder> {
-    const order = await this.orderService.createOrder(creatorId, title, description, milestones);
-    this.emit(EscrowEvents.ORDER_CREATED, order);
+    const order = await this.orderService.createOrder(customerId, title, description, milestones);
+    this.emit('order:created', order);
     return order;
   }
-  
+
   /**
-   * Create a new group order with multiple participants
-   * @param participantIds IDs of the initial participants
+   * Create a group order with multiple customers
+   * @param customerIds List of customer IDs
    * @param title Order title
    * @param description Order description
-   * @param milestones Array of milestone data
-   * @returns Created group order
+   * @param milestones List of milestones
+   * @returns Created group order (IOrder)
    */
   async createGroupOrder(
-    participantIds: string[],
+    customerIds: string[],
     title: string,
     description: string,
-    milestones: { description: string; amount: number | string; deadline?: Date }[]
+    milestones: { description: string; amount: string; deadline?: Date }[]
   ): Promise<IOrder> {
-    if (participantIds.length < 2) {
-      throw new Error("Group order requires at least two participants");
-    }
-    
-    // Create order with first participant as creator
-    const order = await this.orderService.createOrder(participantIds[0], title, description, milestones, true);
-    
-    // Add other participants to the order
-    for (let i = 1; i < participantIds.length; i++) {
-      await this.orderService.joinOrder(order.id, participantIds[i], "0");
-    }
-    
-    this.emit(EscrowEvents.ORDER_CREATED, order);
-    return order;
+    const serviceMilestones = milestones.map(m => ({ 
+      ...m, 
+      amount: m.amount
+    }));
+    const order = await this.orderService.createGroupOrder(customerIds, title, description, serviceMilestones);
+    this.emit('order:created', order);
+    this.emit('group-order:created', order);
+    return order; 
   }
-  
+
   /**
-   * Get an order by ID
+   * Get order by ID
    * @param orderId Order ID
-   * @returns Order instance
+   * @returns Order (IOrder) or null if not found
    */
-  async getOrder(orderId: string): Promise<IOrder> {
-    return this.orderService.getOrder(orderId);
+  async getOrder(orderId: string): Promise<IOrder | null> {
+    const order = await this.orderService.getOrder(orderId);
+    return order ? order : null;
   }
-  
-  /**
-   * Get the contributions made by participants to an order
-   * @param orderId Order ID
-   * @returns Map of user IDs to contribution amounts
-   */
-  async getOrderContributions(orderId: string): Promise<Record<string, Decimal>> {
-    return this.orderService.getOrderContributions(orderId);
-  }
-  
-  /**
-   * Join an order with initial contribution
-   * @param orderId Order ID
-   * @param userId User ID
-   * @param contribution Initial contribution amount
-   * @returns Updated order
-   */
-  async joinOrder(
-    orderId: string,
-    userId: string,
-    contribution: number | string
-  ): Promise<IOrder> {
-    const order = await this.orderService.joinOrder(orderId, userId, contribution);
-    
-    if (order.status === OrderStatus.FUNDED) {
-      this.emit(EscrowEvents.ORDER_FUNDED, order);
-      this.emit(EscrowEvents.ORDER_STATUS_CHANGED, { orderId, status: OrderStatus.FUNDED });
-    }
-    
-    return order;
-  }
-  
+
   /**
    * Assign contractor to an order
    * @param orderId Order ID
    * @param contractorId Contractor ID
-   * @returns Updated order
+   * @returns Updated order (IOrder)
    */
   async assignContractor(orderId: string, contractorId: string): Promise<IOrder> {
-    return this.orderService.assignContractor(orderId, contractorId);
+    const order = await this.orderService.assignContractor(orderId, contractorId);
+    this.emit('order:contractor-assigned', { orderId, contractorId });
+    return order;
   }
-  
+
   /**
    * Contribute funds to an order
    * @param orderId Order ID
-   * @param userId User ID
+   * @param customerId Customer ID
    * @param amount Amount to contribute
-   * @returns Updated order
+   * @returns Updated order (IOrder)
    */
-  async contributeFunds(
-    orderId: string,
-    userId: string,
-    amount: number | string
-  ): Promise<IOrder> {
-    const order = await this.orderService.contributeFunds(orderId, userId, amount);
+  async contributeFunds(orderId: string, customerId: string, amount: string): Promise<IOrder> {
+    const order = await this.orderService.contributeFunds(orderId, customerId, amount);
+    this.emit('order:funds-contributed', { orderId, customerId, amount });
     
     if (order.status === OrderStatus.FUNDED) {
-      this.emit(EscrowEvents.ORDER_FUNDED, order);
-      this.emit(EscrowEvents.ORDER_STATUS_CHANGED, { orderId, status: OrderStatus.FUNDED });
+      this.emit('order:funded', order);
     }
     
     return order;
   }
-  
+
   /**
-   * Mark a milestone as complete
-   * @param orderId Order ID
-   * @param milestoneId Milestone ID
-   * @param contractorId Contractor ID
-   * @returns Created Act
-   */
-  async markMilestoneComplete(
-    orderId: string,
-    milestoneId: string,
-    contractorId: string
-  ): Promise<IAct> {
-    const act = await this.orderService.markMilestoneComplete(orderId, milestoneId, contractorId);
-    
-    this.emit(EscrowEvents.MILESTONE_COMPLETED, { orderId, milestoneId });
-    this.emit(EscrowEvents.ACT_CREATED, act);
-    
-    const order = await this.getOrder(orderId);
-    if (order.status === OrderStatus.IN_PROGRESS) {
-      this.emit(EscrowEvents.ORDER_STATUS_CHANGED, { orderId, status: OrderStatus.IN_PROGRESS });
-    }
-    
-    return act;
-  }
-  
-  /**
-   * Sign an act
-   * @param actId Act ID
-   * @param userId User ID
-   * @returns true if act is now complete, false otherwise
-   */
-  async signAct(actId: string, userId: string): Promise<boolean> {
-    const isComplete = await this.orderService.signAct(actId, userId);
-    
-    this.emit(EscrowEvents.ACT_SIGNED, { actId, userId });
-    
-    if (isComplete) {
-      this.emit(EscrowEvents.ACT_COMPLETED, { actId });
-      
-      // Find the order and milestone for this act
-      for (const order of await this.getOrdersByStatus(OrderStatus.IN_PROGRESS)) {
-        const milestone = order.getMilestones().find(m => m.act?.id === actId);
-        if (milestone) {
-          this.emit(EscrowEvents.MILESTONE_PAID, { orderId: order.id, milestoneId: milestone.id });
-          
-          if (order.status === OrderStatus.COMPLETED) {
-            this.emit(EscrowEvents.ORDER_STATUS_CHANGED, { orderId: order.id, status: OrderStatus.COMPLETED });
-          }
-          break;
-        }
-      }
-    }
-    
-    return isComplete;
-  }
-  
-  /**
-   * Vote for a new representative
+   * Vote for representative in a group order
    * @param orderId Order ID
    * @param voterId Voter ID
    * @param candidateId Candidate ID
    * @returns true if representative changed, false otherwise
    */
-  async voteForRepresentative(
-    orderId: string,
-    voterId: string,
-    candidateId: string
-  ): Promise<boolean> {
-    const changed = await this.orderService.voteForRepresentative(orderId, voterId, candidateId);
+  async voteForRepresentative(orderId: string, voterId: string, candidateId: string): Promise<boolean> {
+    const representativeChanged = await this.orderService.voteForRepresentative(orderId, voterId, candidateId);
     
-    if (changed) {
-      const order = await this.getOrder(orderId);
-      this.emit(EscrowEvents.ORDER_REPRESENTATIVE_CHANGED, { 
+    if (representativeChanged) {
+      const order = await this.orderService.getOrder(orderId);
+      this.emit('group-order:representative-changed', { 
         orderId, 
-        newRepresentativeId: order.representativeId 
+        representativeId: candidateId 
       });
     }
     
-    return changed;
+    return representativeChanged;
   }
-  
-  /**
-   * Get orders by status
-   * @param status Order status
-   * @returns Array of matching orders
-   */
-  async getOrdersByStatus(status: OrderStatus): Promise<IOrder[]> {
-    return this.orderService.getOrdersByStatus(status);
-  }
-  
-  // Document Management
-  
+
+  // Document management methods
+
   /**
    * Create a document
    * @param orderId Order ID
-   * @param documentType Document type
+   * @param type Document type
+   * @param name Document name (required by underlying service)
    * @param content Document content
-   * @param createdBy Creator user ID
-   * @returns Created document
+   * @param createdBy Creator's user ID
+   * @returns Created document (IDocument)
    */
   async createDocument(
     orderId: string,
-    documentType: DocumentType,
-    content: string,
+    type: DocumentType,
+    name: string,
+    content: any,
     createdBy: string
   ): Promise<IDocument> {
-    const document = await this.documentService.createDocument(orderId, documentType, content, createdBy);
-    this.emit(EscrowEvents.DOCUMENT_CREATED, document);
+    const document = await this.documentService.createDocument(
+      createdBy, 
+      orderId, 
+      type, 
+      name, 
+      content
+    );
+    this.emit('document:created', { documentId: document.id, type });
     return document;
   }
-  
+
   /**
-   * Get a document by ID
+   * Get document by ID
    * @param documentId Document ID
-   * @returns Document instance
+   * @returns Document (IDocument) or null if not found
    */
-  async getDocument(documentId: string): Promise<IDocument> {
-    return this.documentService.getDocument(documentId);
+  async getDocument(documentId: string): Promise<IDocument | null> {
+    const document = await this.documentService.getDocument(documentId);
+    return document ? document : null;
   }
-  
+
   /**
    * Approve a document
    * @param documentId Document ID
-   * @param userId User ID
-   * @returns true if document is approved, false otherwise
+   * @param userId User ID approving the document
+   * @param comments Optional comments
+   * @returns Updated document (IDocument) or null
    */
-  async approveDocument(documentId: string, userId: string): Promise<boolean> {
-    const isApproved = await this.documentService.approveDocument(documentId, userId);
-    this.emit(EscrowEvents.DOCUMENT_APPROVED, { documentId, userId, isApproved });
-    return isApproved;
-  }
-  
-  /**
-   * Update a document
-   * @param documentId Document ID
-   * @param content New content
-   * @param userId User ID
-   * @returns Updated document
-   */
-  async updateDocument(
+  async approveDocument(
     documentId: string,
-    content: string,
-    userId: string
-  ): Promise<IDocument> {
-    const document = await this.documentService.updateDocument(documentId, content, userId);
-    this.emit(EscrowEvents.DOCUMENT_UPDATED, document);
-    return document;
-  }
-  
-  /**
-   * Get documents for an order
-   * @param orderId Order ID
-   * @returns Map of document types to documents
-   */
-  async getDocumentsByOrder(orderId: string): Promise<Map<DocumentType, IDocument>> {
-    return this.documentService.getDocumentsByOrder(orderId);
-  }
-  
-  // Communication Management
-  
-  /**
-   * Create a discussion
-   * @param orderId Order ID
-   * @param title Discussion title
-   * @param creatorId Creator user ID
-   * @returns Created discussion
-   */
-  async createDiscussion(
-    orderId: string,
-    title: string,
-    creatorId: string
-  ): Promise<IDiscussion> {
-    const discussion = await this.communicationService.createDiscussion(orderId, title, creatorId);
-    this.emit(EscrowEvents.DISCUSSION_CREATED, discussion);
-    return discussion;
-  }
-  
-  /**
-   * Get a discussion by ID
-   * @param discussionId Discussion ID
-   * @returns Discussion instance
-   */
-  async getDiscussion(discussionId: string): Promise<IDiscussion> {
-    return this.communicationService.getDiscussion(discussionId);
-  }
-  
-  /**
-   * Get discussions for an order
-   * @param orderId Order ID
-   * @returns Array of discussions
-   */
-  async getDiscussionsByOrder(orderId: string): Promise<IDiscussion[]> {
-    return this.communicationService.getDiscussionsByOrder(orderId);
-  }
-  
-  /**
-   * Send a message
-   * @param discussionId Discussion ID
-   * @param senderId Sender user ID
-   * @param content Message content
-   * @param type Message type
-   * @param fileUrl Optional file URL for attachments
-   * @returns Created message
-   */
-  async sendMessage(
-    discussionId: string,
-    senderId: string,
-    content: string,
-    type: string = MessageType.TEXT,
-    fileUrl?: string
-  ): Promise<IMessage> {
-    const message = await this.communicationService.sendMessage(discussionId, senderId, content, type, fileUrl);
-    this.emit(EscrowEvents.MESSAGE_SENT, message);
-    return message;
-  }
-  
-  /**
-   * Get messages from a discussion
-   * @param discussionId Discussion ID
-   * @param page Page number
-   * @param pageSize Page size
-   * @returns Array of messages
-   */
-  async getMessages(
-    discussionId: string,
-    page?: number,
-    pageSize?: number
-  ): Promise<IMessage[]> {
-    return this.communicationService.getMessages(discussionId, page, pageSize);
-  }
-  
-  /**
-   * Mark a message as read
-   * @param messageId Message ID
-   * @param userId User ID
-   * @returns true if successful
-   */
-  async markMessageAsRead(messageId: string, userId: string): Promise<boolean> {
-    return this.communicationService.markMessageAsRead(messageId, userId);
-  }
-  
-  // Document Management with AI
-  
-  /**
-   * Generate a Definition of Ready document for an order
-   * @param orderId Order ID
-   * @returns Generated DoR document
-   */
-  async generateDoR(orderId: string): Promise<IDoRDocument> {
-    if (!this.aiService) {
-      throw new Error('AI service not initialized. Call setAiApiKey() first.');
+    userId: string,
+    comments?: string
+  ): Promise<IDocument | null> {
+    const approved = await this.documentService.approveDocument(documentId, userId);
+    if (approved) {
+      this.emit('document:approved', { documentId, userId });
+      const updatedDoc = await this.getDocument(documentId);
+      return updatedDoc ? updatedDoc : null;
+    } else {
+      console.warn(`Document ${documentId} approval failed or returned false.`);
+      return null;
     }
-    
-    const order = await this.getOrder(orderId);
-    const dorDocument = await this.aiService.generateDoR(order);
-    
-    // Store the document
-    await this.documentService.createDocument(
-      'SYSTEM',
-      orderId,
-      DocumentType.DEFINITION_OF_READY,
-      'Definition of Ready',
-      dorDocument.content
-    );
-    
-    this.emit(EscrowEvents.DOR_GENERATED, { orderId, dor: dorDocument });
-    this.emit(EscrowEvents.DOCUMENT_CREATED, dorDocument);
-    
-    return dorDocument;
   }
-  
+
   /**
-   * Generate a roadmap document for an order
+   * Submit a deliverable
+   * @param userId User ID submitting the deliverable
    * @param orderId Order ID
-   * @returns Generated roadmap document
-   */
-  async generateRoadmap(orderId: string): Promise<IRoadmapDocument> {
-    if (!this.aiService) {
-      throw new Error('AI service not initialized. Call setAiApiKey() first.');
-    }
-    
-    const order = await this.getOrder(orderId);
-    const roadmapDocument = await this.aiService.generateRoadmap(order);
-    
-    // Store the document
-    await this.documentService.createDocument(
-      'SYSTEM',
-      orderId,
-      DocumentType.ROADMAP,
-      'Project Roadmap',
-      roadmapDocument.content
-    );
-    
-    this.emit(EscrowEvents.ROADMAP_GENERATED, { orderId, roadmap: roadmapDocument });
-    this.emit(EscrowEvents.DOCUMENT_CREATED, roadmapDocument);
-    
-    return roadmapDocument;
-  }
-  
-  /**
-   * Generate a Definition of Done document for an order
-   * @param orderId Order ID
-   * @returns Generated DoD document
-   */
-  async generateDoD(orderId: string): Promise<IDoDDocument> {
-    if (!this.aiService) {
-      throw new Error('AI service not initialized. Call setAiApiKey() first.');
-    }
-    
-    const order = await this.getOrder(orderId);
-    
-    // Find roadmap document
-    const documents = await this.documentService.getDocumentsByOrderId(orderId);
-    let roadmapDocument: IRoadmapDocument | null = null;
-    
-    for (const doc of documents) {
-      if (doc.documentType === DocumentType.ROADMAP) {
-        roadmapDocument = doc as IRoadmapDocument;
-        break;
-      }
-    }
-    
-    if (!roadmapDocument) {
-      throw new Error('Roadmap document required to generate Definition of Done');
-    }
-    
-    const dodDocument = await this.aiService.generateDoD(order, roadmapDocument);
-    
-    // Store the document
-    await this.documentService.createDocument(
-      'SYSTEM',
-      orderId,
-      DocumentType.DEFINITION_OF_DONE,
-      'Definition of Done',
-      dodDocument.content
-    );
-    
-    this.emit(EscrowEvents.DOD_GENERATED, { orderId, dod: dodDocument });
-    this.emit(EscrowEvents.DOCUMENT_CREATED, dodDocument);
-    
-    return dodDocument;
-  }
-  
-  /**
-   * Submit a deliverable for a phase of a project
-   * @param userId User ID
-   * @param orderId Order ID
-   * @param phaseId Phase ID
-   * @param name Deliverable name
-   * @param content Deliverable content
-   * @param files Optional files
-   * @returns Submitted deliverable document
+   * @param phaseId Optional phase ID from roadmap
+   * @param title Deliverable title
+   * @param details Optional details
+   * @param files Optional list of files
+   * @returns Created deliverable (IDocument)
    */
   async submitDeliverable(
     userId: string,
     orderId: string,
-    phaseId: string,
-    name: string,
-    content: any,
+    phaseId: string | undefined,
+    title: string,
+    details?: Record<string, any>,
     files?: string[]
   ): Promise<IDocument> {
-    const deliverable = await this.documentService.submitDeliverable(
-      userId, orderId, phaseId, name, content, files
-    );
-    
-    this.emit(EscrowEvents.DELIVERABLE_SUBMITTED, { 
-      orderId, phaseId, deliverable, userId 
-    });
-    
-    return deliverable;
-  }
-  
-  /**
-   * Validate deliverables against DoD criteria
-   * @param orderId Order ID
-   * @param phaseId Phase ID
-   * @returns Validation results
-   */
-  async validateDeliverables(orderId: string, phaseId: string): Promise<IDoDComplianceResult> {
-    if (!this.aiService) {
-      throw new Error('AI service not initialized. Call setAiApiKey() first.');
+    if (phaseId === undefined) {
+      throw new Error('phaseId cannot be undefined when submitting a deliverable needing it.');
     }
-    
-    const result = await this.documentService.validateDeliverables(orderId, phaseId);
-    
-    this.emit(EscrowEvents.DELIVERABLE_VALIDATED, {
+    const deliverableDoc = await this.documentService.submitDeliverable(
+      userId,
       orderId,
       phaseId,
-      compliant: result.compliant,
-      score: result.overallScore
-    });
-    
-    return result;
+      title,
+      details,
+      files
+    );
+    this.emit('deliverable:submitted', { deliverableId: deliverableDoc.id, orderId, phaseId });
+    return deliverableDoc;
   }
-  
+
   /**
-   * Generate an act for a milestone with specified deliverables
+   * Generate an act document for completed work
    * @param orderId Order ID
    * @param milestoneId Milestone ID
-   * @param deliverableIds IDs of deliverable documents
-   * @returns The generated act
+   * @param deliverableIds List of deliverable IDs
+   * @returns Created act document (IAct)
    */
   async generateAct(
     orderId: string,
     milestoneId: string,
     deliverableIds: string[]
   ): Promise<IAct> {
-    const act = await this.documentService.generateAct(orderId, milestoneId, deliverableIds);
-    
-    this.emit(EscrowEvents.ACT_CREATED, act);
-    
+    const order = await this.orderService.getOrder(orderId);
+    if (!order) {
+      throw new Error(`Order with ID ${orderId} not found`);
+    }
+
+    if (!order.contractorId) {
+      throw new Error('Order does not have an assigned contractor');
+    }
+
+    const act = await this.documentService.generateAct(orderId, milestoneId, deliverableIds); 
+    if (!act) {
+        throw new Error('Failed to generate Act document.'); // Or handle null appropriately
+    }
+    this.emit('act:generated', { actId: act.id, orderId, milestoneId });
     return act;
   }
-  
+
   /**
-   * Sign an act using the document service
+   * Sign an act document
    * @param actId Act ID
    * @param userId User ID signing the act
-   * @returns The updated act
+   * @returns Updated act document (IAct)
    */
   async signActDocument(actId: string, userId: string): Promise<IAct> {
     const act = await this.documentService.signAct(actId, userId);
-    
-    this.emit(EscrowEvents.ACT_SIGNED, { actId, userId });
-    
-    if (act.status === 'completed') {
-      this.emit(EscrowEvents.ACT_COMPLETED, { actId });
-    }
+    this.emit('act:signed', { actId, userId });
     
     return act;
   }
-  
+
+  // AI-powered document methods
+
   /**
-   * Set automatic signing timeout for an act
-   * @param actId Act ID
-   * @param timeoutDays Number of days until auto-signing
+   * Generate a Definition of Ready document using AI
+   * @param orderId Order ID
+   * @returns Generated DoR document (IDocument)
    */
-  async setupActAutoSigning(actId: string, timeoutDays?: number): Promise<void> {
-    await this.documentService.signActWithTimeout(actId, timeoutDays);
+  async generateDoR(orderId: string): Promise<IDocument> {
+    if (!this.aiService) {
+      throw new Error('AI service is not initialized. Provide API key in constructor');
+    }
+    const order = await this.getOrder(orderId);
+    if (!order) {
+      throw new Error(`Order with ID ${orderId} not found`);
+    }
+    const document = await this.aiService.generateDoR(order);
+    this.emit('document:generated', { documentId: document.id, type: DocumentType.DEFINITION_OF_READY });
+    return document;
+  }
+
+  /**
+   * Generate a Roadmap document using AI
+   * @param orderId Order ID
+   * @returns Generated Roadmap document (IDocument)
+   */
+  async generateRoadmap(orderId: string): Promise<IDocument> {
+    if (!this.aiService) {
+      throw new Error('AI service is not initialized. Provide API key in constructor');
+    }
+    const order = await this.getOrder(orderId);
+    if (!order) {
+      throw new Error(`Order with ID ${orderId} not found`);
+    }
+    const document = await this.aiService.generateRoadmap(order);
+    this.emit('document:generated', { documentId: document.id, type: DocumentType.ROADMAP });
+    return document;
+  }
+
+  /**
+   * Generate a Definition of Done document using AI
+   * @param orderId Order ID
+   * @returns Generated DoD document (IDocument)
+   */
+  async generateDoD(orderId: string): Promise<IDocument> {
+    if (!this.aiService) {
+      throw new Error('AI service is not initialized. Provide API key in constructor');
+    }
+    
+    // Get the order
+    const order = await this.getOrder(orderId);
+    if (!order) {
+      throw new Error(`Order with ID ${orderId} not found`);
+    }
+
+    // Get the Roadmap document for this order
+    // Assuming DocumentService has a method like getDocumentByTypeAndOrder
+    // Or we find it manually from the list of documents for the order.
+    // For simplicity, let's assume DocumentService has getDocumentsByOrderId
+    const documents = await this.documentService.getDocumentsByOrderId(orderId);
+    const roadmapDoc = documents.find(doc => doc.documentType === DocumentType.ROADMAP);
+
+    if (!roadmapDoc) {
+        throw new Error(`Roadmap document not found for order ${orderId}. Cannot generate DoD.`);
+    }
+
+    // Call aiService.generateDoD with both order and roadmap
+    const dodDocument = await this.aiService.generateDoD(order, roadmapDoc as any); // Cast roadmapDoc if needed
+    this.emit('document:generated', { documentId: dodDocument.id, type: DocumentType.DEFINITION_OF_DONE });
+    return dodDocument;
+  }
+
+  /**
+   * Validate deliverables against DoD criteria using AI
+   * @param orderId Order ID
+   * @param phaseId Optional phase ID to validate specific phase
+   * @returns Validation result
+   */
+  async validateDeliverables(orderId: string, phaseId?: string): Promise<{
+    compliant: boolean;
+    feedback: string;
+    suggestions?: string[];
+  }> {
+    if (!this.aiService) {
+      throw new Error('AI service is not initialized. Provide API key in constructor');
+    }
+    
+    throw new Error('aiService.validateDeliverables method not implemented or available.');
+  }
+
+  /**
+   * Generate a specification document using AI
+   * @param orderId Order ID
+   * @param title Title of the specification
+   * @param description Description or outline of what to include
+   * @returns Generated specification document (IDocument)
+   */
+  async generateSpecification(orderId: string, title: string, description: string): Promise<IDocument> {
+    if (!this.aiService) {
+      throw new Error('AI service is not initialized. Provide API key in constructor');
+    }
+    
+    throw new Error('aiService.generateSpecification method not implemented or available.');
   }
 } 

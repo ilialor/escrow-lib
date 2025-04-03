@@ -1,39 +1,30 @@
 /**
  * Types of users in the system
  */
+// Removed duplicate enum
+/*
 export enum UserType {
-  /** Customer - creates orders and pays for them */
   CUSTOMER = 'CUSTOMER',
-  
-  /** Contractor - executes orders */
   CONTRACTOR = 'CONTRACTOR',
-  
-  /** Platform - administrative user */
   PLATFORM = 'PLATFORM'
 }
+*/
 
-/**
- * User interface
- */
+// Import from constants
+import { UserType } from '../utils/constants';
+
+// Re-export UserType so other interface files can import it from here if needed
+export { UserType };
+
+// Remove the duplicate User interface definition
+/*
 export interface User {
-  /** Unique identifier */
   id: string;
-  
-  /** User name */
   name: string;
-  
-  /** User type */
   type: UserType;
-  
-  /** User email */
   email?: string;
-  
-  /** User avatar URL */
   avatarUrl?: string;
-  
-  /** Creation timestamp */
   createdAt: Date;
-  
-  /** Additional metadata */
   metadata?: Record<string, any>;
 } 
+*/ 

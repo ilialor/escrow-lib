@@ -338,4 +338,60 @@ export class OrderService implements IOrderService {
     
     return result;
   }
+
+  /**
+   * Create a new group order
+   * @param customerIds List of customer IDs creating the order
+   * @param title Order title
+   * @param description Order description
+   * @param milestones Array of milestone data
+   * @returns Created group order
+   */
+  async createGroupOrder(
+    customerIds: string[],
+    title: string,
+    description: string,
+    milestones: { description: string; amount: number | string; deadline?: Date }[]
+  ): Promise<IOrder> {
+    if (!customerIds || customerIds.length === 0) {
+        throw new Error('Group order must have at least one customer');
+    }
+
+    // Verify all creators exist and are customers
+    const customerUsers: Customer[] = [];
+    for (const customerId of customerIds) {
+        const user = await this.userService.getUser(customerId);
+        if (user.userType !== UserType.CUSTOMER) {
+            throw new Error(`User ${customerId} is not a customer and cannot create a group order`);
+        }
+        customerUsers.push(user as Customer);
+    }
+
+    // Validate milestone data
+    if (!milestones || milestones.length === 0) {
+      throw new Error('Order must have at least one milestone');
+    }
+
+    // Use the first customer as the initial creator/representative for the Order model
+    const creatorId = customerIds[0];
+    const order = new Order(creatorId, title, description, milestones, true); // Pass true for isGroupOrder
+
+    // Add all customers as participants and add order to their lists
+    for (const customer of customerUsers) {
+        if (!order.participants.includes(customer.id)) {
+             order.participants.push(customer.id);
+        }
+        customer.addOrder(order.id);
+        // Initial contributions might be handled later via contributeFunds or joinOrder
+        // Or set initial zero contributions here if needed:
+        // if (!order.contributors.has(customer.id)) {
+        //     order.contributors.set(customer.id, new Decimal(0));
+        // }
+    }
+    // Set the representative to the first customer initially
+    order.representativeId = creatorId;
+
+    this.orders.set(order.id, order);
+    return order;
+  }
 } 

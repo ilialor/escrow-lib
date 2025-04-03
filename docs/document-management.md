@@ -51,25 +51,48 @@ escrowManager.setAiApiKey('ваш-gemini-api-ключ');
 ### Создание документов
 
 ```typescript
-// Генерация Definition of Ready
+// Создание документа с обязательным параметром name (возвращает Promise<IDocument>)
+const document = await escrowManager.createDocument(
+  orderId,
+  DocumentType.SPECIFICATION,
+  'Название документа', // name - обязательный параметр
+  { content: 'Содержимое документа' },
+  createdBy
+);
+
+// Получение документа (возвращает Promise<IDocument | null>)
+const document = await escrowManager.getDocument(documentId);
+if (document) {
+  console.log(`Документ найден: ${document.name}`);
+} else {
+  console.log('Документ не найден');
+}
+
+// Утверждение документа (возвращает Promise<IDocument | null>)
+const approvedDocument = await escrowManager.approveDocument(documentId, userId);
+if (approvedDocument) {
+  console.log('Документ успешно утвержден');
+}
+
+// Генерация Definition of Ready (возвращает Promise<IDocument>)
 const dor = await escrowManager.generateDoR(orderId);
 
-// Генерация дорожной карты
+// Генерация дорожной карты (возвращает Promise<IDocument>)
 const roadmap = await escrowManager.generateRoadmap(orderId);
 
-// Генерация Definition of Done (требуется наличие дорожной карты)
+// Генерация Definition of Done (требуется наличие дорожной карты) (возвращает Promise<IDocument>)
 const dod = await escrowManager.generateDoD(orderId);
 ```
 
 ### Работа с результатами
 
 ```typescript
-// Отправка результата работы (deliverable)
+// Отправка результата работы (deliverable) (возвращает Promise<IDocument>)
 const deliverable = await escrowManager.submitDeliverable(
   userId,
   orderId,
   phaseId,
-  'Результат фазы проектирования',
+  'Результат фазы проектирования', // name - обязательный параметр
   { details: 'Подробное описание результата' },
   ['file1.pdf', 'file2.docx'] // опциональные файлы
 );
@@ -95,14 +118,14 @@ validationResult.details.forEach(detail => {
 ### Работа с актами
 
 ```typescript
-// Создание акта для вехи с указанием связанных deliverables
+// Создание акта для вехи с указанием связанных deliverables (возвращает Promise<IAct>)
 const act = await escrowManager.generateAct(
   orderId,
   milestoneId,
   [deliverable1Id, deliverable2Id]
 );
 
-// Подписание акта
+// Подписание акта (возвращает Promise<IAct>)
 await escrowManager.signActDocument(actId, contractorId);
 await escrowManager.signActDocument(actId, customerId);
 
@@ -153,7 +176,7 @@ escrowManager.on(EscrowEvents.ACT_COMPLETED, data => {
 ### DoR (Definition of Ready)
 
 ```typescript
-interface IDoRDocument {
+interface IDoRDocument extends IDocument {
   content: {
     format: string;      // Требуемый формат материалов
     volume: string;      // Ожидаемый объем работы
@@ -168,7 +191,7 @@ interface IDoRDocument {
 ### Roadmap
 
 ```typescript
-interface IRoadmapDocument {
+interface IRoadmapDocument extends IDocument {
   content: {
     phases: {
       id: string;        // Уникальный ID фазы
@@ -185,7 +208,7 @@ interface IRoadmapDocument {
 ### DoD (Definition of Done)
 
 ```typescript
-interface IDoDDocument {
+interface IDoDDocument extends IDocument {
   content: {
     criteria: {
       id: string;        // Уникальный ID критерия

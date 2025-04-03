@@ -10,12 +10,17 @@ import {
 } from './base';
 import { DocumentType, OrderStatus, UserType } from '../utils/constants';
 
+// Explicitly export imported interfaces if needed elsewhere
+export { IOrder, IDocument, IMilestone };
+
 export interface IUserService {
   createUser(name: string, userType: UserType): Promise<IUser>;
   getUser(userId: string): Promise<IUser>;
   deposit(userId: string, amount: Decimal): Promise<Decimal>;
   withdraw(userId: string, amount: Decimal): Promise<Decimal>;
   getUserOrders(userId: string): Promise<IOrder[]>;
+  getActsByOrderId(orderId: string): Promise<IAct[]>;
+  signActWithTimeout(actId: string, timeoutDays: number): Promise<void>;
 }
 
 export interface IOrderService {
@@ -26,103 +31,84 @@ export interface IOrderService {
     milestones: { description: string; amount: number | string; deadline?: Date }[],
     isGroupOrder?: boolean
   ): Promise<IOrder>;
-  
+  createGroupOrder(
+    customerIds: string[],
+    title: string,
+    description: string,
+    milestones: { description: string; amount: number | string; deadline?: Date }[]
+  ): Promise<IOrder>;
   getOrder(orderId: string): Promise<IOrder>;
-  
   getOrderContributions(orderId: string): Promise<Record<string, Decimal>>;
-  
   joinOrder(
     orderId: string,
     userId: string,
     contribution: number | string
   ): Promise<IOrder>;
-  
   assignContractor(orderId: string, contractorId: string): Promise<IOrder>;
-  
   contributeFunds(
     orderId: string,
     userId: string,
     amount: number | string
   ): Promise<IOrder>;
-  
   markMilestoneComplete(
     orderId: string,
     milestoneId: string,
     contractorId: string
   ): Promise<IAct>;
-  
   signAct(actId: string, userId: string): Promise<boolean>;
-  
   voteForRepresentative(
     orderId: string,
     voterId: string,
     candidateId: string
   ): Promise<boolean>;
-  
   getOrdersByStatus(status: OrderStatus): Promise<IOrder[]>;
 }
 
 export interface IDocumentService {
   createDocument(
+    userId: string,
     orderId: string,
-    documentType: DocumentType,
-    content: string,
-    createdBy: string
+    type: DocumentType,
+    name: string,
+    content: any,
+    files?: string[]
   ): Promise<IDocument>;
-  
   getDocument(documentId: string): Promise<IDocument>;
-  
+  getDocumentById(documentId: string): Promise<IDocument | null>;
   approveDocument(documentId: string, userId: string): Promise<boolean>;
-  
   updateDocument(
     documentId: string,
-    content: string,
-    userId: string
+    updates: Partial<IDocument>
   ): Promise<IDocument>;
-  
   getDocumentsByOrder(orderId: string): Promise<Map<DocumentType, IDocument>>;
-
+  getDocumentsByOrderId(orderId: string): Promise<IDocument[]>;
   submitDeliverable(
+    userId: string,
     orderId: string,
-    milestoneId: string,
-    content: string,
-    type: string,
-    createdBy: string
+    phaseId: string,
+    name: string,
+    content: any,
+    files?: string[]
   ): Promise<IDocument>;
-
   validateDeliverables(
     orderId: string,
-    milestoneId: string
-  ): Promise<{ valid: boolean; report: any }>;
-
+    phaseId: string
+  ): Promise<IDoDComplianceResult>;
   generateAct(
     orderId: string,
     milestoneId: string,
-    contractorId: string
+    deliverableIds: string[]
   ): Promise<IAct>;
-
-  signActWithTimeout(
+  signAct(
     actId: string,
-    userId: string,
-    timeoutDays: number
-  ): Promise<{
-    isComplete: boolean;
-    platformSigned?: boolean;
-    signatures: string[];
-  }>;
-
-  createDocument(userId: string, orderId: string, type: string, name: string, content: any): Promise<IDocument>;
-  getDocumentsByOrderId(orderId: string): Promise<IDocument[]>;
-  getDocumentById(documentId: string): Promise<IDocument | null>;
-  updateDocument(documentId: string, updates: Partial<IDocument>): Promise<IDocument>;
-  
-  submitDeliverable(userId: string, orderId: string, phaseId: string, name: string, content: any, files?: string[]): Promise<IDocument>;
-  validateDeliverables(orderId: string, phaseId: string): Promise<IDoDComplianceResult>;
-  generateAct(orderId: string, milestoneId: string, deliverableIds: string[]): Promise<IAct>;
-  signAct(actId: string, userId: string): Promise<IAct>;
+    userId: string
+  ): Promise<IAct>;
   getActById(actId: string): Promise<IAct | null>;
   getActsByOrderId(orderId: string): Promise<IAct[]>;
-  signActWithTimeout(actId: string, timeoutDays: number): Promise<void>;
+  signActWithTimeout(
+    actId: string,
+    timeoutDays: number
+  ): Promise<void>;
 }
 
 export interface ICommunicationService {
@@ -131,11 +117,8 @@ export interface ICommunicationService {
     title: string,
     creatorId: string
   ): Promise<IDiscussion>;
-  
   getDiscussion(discussionId: string): Promise<IDiscussion>;
-  
   getDiscussionsByOrder(orderId: string): Promise<IDiscussion[]>;
-  
   sendMessage(
     discussionId: string,
     senderId: string,
@@ -143,13 +126,11 @@ export interface ICommunicationService {
     type?: string,
     fileUrl?: string
   ): Promise<IMessage>;
-  
   getMessages(
     discussionId: string,
     page?: number,
     pageSize?: number
   ): Promise<IMessage[]>;
-  
   markMessageAsRead(messageId: string, userId: string): Promise<boolean>;
 }
 
@@ -210,15 +191,4 @@ export interface IDoDDocument extends IDocument {
       phaseId: string;
     }[];
   };
-}
-
-export interface IAct extends IDocument {
-  status: string;
-  signatures: {
-    userType: string;
-    userId: string;
-    signedAt?: Date;
-  }[];
-  deadline: Date;
-  relatedDeliverables: string[]; // Document IDs
 } 

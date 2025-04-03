@@ -135,6 +135,12 @@ escrowManager.on('act:signed', data => {
 - [communication.md](docs/communication.md) - Система коммуникации
 - [events.md](docs/events.md) - События и подписки
 
+## Экспортируемые типы
+
+Библиотека экспортирует следующие основные интерфейсы:
+- Интерфейсы моделей (IUser, IOrder, IDocument, IMilestone, IAct) экспортируются из './interfaces/base'
+- Перечисления (UserType, OrderStatus, DocumentType, ActStatus и т.д.) экспортируются из './utils/constants'
+
 ## Лицензия
 
 MIT 

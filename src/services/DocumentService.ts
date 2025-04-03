@@ -1,4 +1,4 @@
-import { Document, DocumentType, Deliverable, ActDocument, ActStatus, DocumentApproval } from '../interfaces';
+import { Document, DocumentType, Deliverable, ActDocument, ActStatus, DocumentApproval, UserType } from '../interfaces';
 import { v4 as uuidv4 } from 'uuid';
 
 /**
@@ -87,7 +87,7 @@ export class DocumentService {
 
     const approval: DocumentApproval = {
       userId,
-      userType: 'USER', // This should be fetched from a user service in real implementation
+      userType: UserType.PLATFORM, // В реальном приложении это должно быть получено от сервиса пользователей
       approvedAt: new Date(),
       comments
     };
@@ -212,7 +212,7 @@ export class DocumentService {
     // Add signature
     const signature = {
       userId,
-      userType: 'USER', // This should be fetched from a user service in real implementation
+      userType: UserType.CONTRACTOR, // В реальном приложении это должно быть получено от сервиса пользователей
       signedAt: new Date()
     };
     

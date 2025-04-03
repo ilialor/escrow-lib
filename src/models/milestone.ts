@@ -1,8 +1,7 @@
 import { Decimal } from 'decimal.js';
 import { v4 as uuidv4 } from 'uuid';
 import { IMilestone, IAct } from '../interfaces/base';
-import { MilestoneStatus } from '../utils/constants';
-import { MIN_SIGNATURES_REQUIRED } from '../utils/constants';
+import { MilestoneStatus, ActStatus, DEFAULT_ACT_SIGNING_DEADLINE_DAYS, MIN_SIGNATURES_REQUIRED } from '../utils/constants';
 
 /**
  * Act of milestone completion
@@ -10,15 +9,23 @@ import { MIN_SIGNATURES_REQUIRED } from '../utils/constants';
 export class Act implements IAct {
   id: string;
   milestoneId: string;
+  orderId: string;
   signatures: Set<string>;
   dateCreated: Date;
   dateSigned?: Date;
+  status: ActStatus;
+  deadline: Date;
+  relatedDeliverables: string[];
 
-  constructor(milestoneId: string, id?: string) {
+  constructor(milestoneId: string, orderId: string, relatedDeliverables: string[] = [], id?: string) {
     this.id = id || uuidv4();
     this.milestoneId = milestoneId;
+    this.orderId = orderId;
     this.signatures = new Set<string>();
     this.dateCreated = new Date();
+    this.status = ActStatus.CREATED;
+    this.deadline = new Date(Date.now() + DEFAULT_ACT_SIGNING_DEADLINE_DAYS * 24 * 60 * 60 * 1000);
+    this.relatedDeliverables = relatedDeliverables;
   }
 
   /**
@@ -57,7 +64,7 @@ export class Milestone implements IMilestone {
   amount: Decimal;
   status: MilestoneStatus;
   deadline?: Date;
-  act?: Act;
+  act?: IAct;
 
   constructor(
     description: string,
@@ -85,14 +92,16 @@ export class Milestone implements IMilestone {
 
   /**
    * Create an act for this milestone
-   * @returns The newly created Act
+   * @param orderId The ID of the order this milestone belongs to
+   * @param relatedDeliverables Optional list of deliverable IDs for the act
+   * @returns The newly created Act (as IAct)
    */
-  createAct(): Act {
+  createAct(orderId: string, relatedDeliverables: string[] = []): IAct {
     if (this.act) {
       throw new Error('Act already exists for this milestone');
     }
     
-    this.act = new Act(this.id);
+    this.act = new Act(this.id, orderId, relatedDeliverables);
     return this.act;
   }
 

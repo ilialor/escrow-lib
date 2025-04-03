@@ -28,11 +28,11 @@ import { EscrowManager, UserType } from 'escrow-lib';
 // Инициализация менеджера с поддержкой AI
 const escrowManager = new EscrowManager('ваш-gemini-api-ключ');
 
-// Создание пользователей
+// Создание пользователей (возвращает Promise<IUser>)
 const customer = await escrowManager.createUser('Иван', UserType.CUSTOMER);
 const contractor = await escrowManager.createUser('Сергей', UserType.CONTRACTOR);
 
-// Создание заказа с вехами
+// Создание заказа с вехами (возвращает Promise<IOrder>)
 const order = await escrowManager.createOrder(
   customer.id,
   'Разработка сайта',
@@ -44,7 +44,7 @@ const order = await escrowManager.createOrder(
   ]
 );
 
-// Генерация документов с использованием AI
+// Генерация документов с использованием AI (возвращает Promise<IDocument>)
 const dor = await escrowManager.generateDoR(order.id);
 const roadmap = await escrowManager.generateRoadmap(order.id);
 const dod = await escrowManager.generateDoD(order.id);

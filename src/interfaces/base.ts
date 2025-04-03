@@ -18,16 +18,20 @@ export interface IMilestone {
   deadline?: Date;
   act?: IAct;
   markAsCompleted(): void;
-  createAct(): IAct;
+  createAct(orderId: string, relatedDeliverables?: string[]): IAct;
   markAsPaid(): void;
 }
 
 export interface IAct {
   id: string;
   milestoneId: string;
+  orderId: string;
   signatures: Set<string>;
   dateCreated: Date;
   dateSigned?: Date;
+  status: ActStatus;
+  deadline: Date;
+  relatedDeliverables: string[];
   addSignature(userId: string): boolean;
   isComplete(): boolean;
 }

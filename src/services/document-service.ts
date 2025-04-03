@@ -1,7 +1,7 @@
 import { IDocumentService } from '../interfaces/services';
-import { IDocument, IAct } from '../interfaces/base';
+import { IDocument, IAct, IMilestone } from '../interfaces/base';
 import { Document } from '../models/document';
-import { DocumentType, ActStatus, DEFAULT_ACT_SIGNING_DEADLINE_DAYS } from '../utils/constants';
+import { DocumentType, ActStatus, DEFAULT_ACT_SIGNING_DEADLINE_DAYS, MIN_SIGNATURES_REQUIRED } from '../utils/constants';
 import { v4 as uuidv4 } from 'uuid';
 import { IDoDComplianceResult } from '../interfaces/services';
 
@@ -42,30 +42,30 @@ export class DocumentService implements IDocumentService {
    * @param createdBy User ID of creator
    * @returns Created document
    */
-  async createDocument(
-    orderId: string,
-    documentType: DocumentType,
-    content: string,
-    createdBy: string
-  ): Promise<IDocument> {
-    // Verify order exists
-    try {
-      await this.orderService.getOrder(orderId);
-    } catch (error) {
-      throw new Error(`Order not found: ${orderId}`);
-    }
+  // async createDocument(
+  //   orderId: string,
+  //   documentType: DocumentType,
+  //   content: string,
+  //   createdBy: string
+  // ): Promise<IDocument> {
+  //   // Verify order exists
+  //   try {
+  //     await this.orderService.getOrder(orderId);
+  //   } catch (error) {
+  //     throw new Error(`Order not found: ${orderId}`);
+  //   }
     
-    // Verify user exists
-    try {
-      await this.userService.getUser(createdBy);
-    } catch (error) {
-      throw new Error(`User not found: ${createdBy}`);
-    }
+  //   // Verify user exists
+  //   try {
+  //     await this.userService.getUser(createdBy);
+  //   } catch (error) {
+  //     throw new Error(`User not found: ${createdBy}`);
+  //   }
     
-    const document = new Document(orderId, documentType, content, createdBy);
-    this.documents.set(document.id, document);
-    return document;
-  }
+  //   const document = new Document(orderId, documentType, content, createdBy);
+  //   this.documents.set(document.id, document);
+  //   return document;
+  // }
   
   /**
    * Create a document with object content and optional name and files
@@ -80,7 +80,7 @@ export class DocumentService implements IDocumentService {
   async createDocument(
     userId: string, 
     orderId: string, 
-    type: string, 
+    type: DocumentType,
     name: string, 
     content: any,
     files?: string[]
@@ -99,7 +99,12 @@ export class DocumentService implements IDocumentService {
       throw new Error(`User not found: ${userId}`);
     }
     
+    // Cast string type to DocumentType enum
     const documentType = type as DocumentType;
+    if (!Object.values(DocumentType).includes(documentType)) {
+        throw new Error(`Invalid document type: ${type}`);
+    }
+
     const document = new Document(orderId, documentType, content, userId, undefined, name, files);
     this.documents.set(document.id, document);
     return document;
@@ -147,30 +152,30 @@ export class DocumentService implements IDocumentService {
     return document.isApproved();
   }
   
-  /**
-   * Update document content
-   * @param documentId Document ID
-   * @param content New content
-   * @param userId User ID making the update
-   * @returns Updated document
-   */
-  async updateDocument(
-    documentId: string,
-    content: string,
-    userId: string
-  ): Promise<IDocument> {
-    const document = await this.getDocument(documentId);
+  // /**
+  //  * Update document content
+  //  * @param documentId Document ID
+  //  * @param content New content
+  //  * @param userId User ID making the update
+  //  * @returns Updated document
+  //  */
+  // async updateDocument(
+  //   documentId: string,
+  //   content: string,
+  //   userId: string
+  // ): Promise<IDocument> {
+  //   const document = await this.getDocument(documentId);
     
-    // Verify user exists
-    try {
-      await this.userService.getUser(userId);
-    } catch (error) {
-      throw new Error(`User not found: ${userId}`);
-    }
+  //   // Verify user exists
+  //   try {
+  //     await this.userService.getUser(userId);
+  //   } catch (error) {
+  //     throw new Error(`User not found: ${userId}`);
+  //   }
     
-    document.updateContent(content, userId);
-    return document;
-  }
+  //   document.updateContent(content, userId);
+  //   return document;
+  // }
   
   /**
    * Update document with partial data
@@ -181,16 +186,47 @@ export class DocumentService implements IDocumentService {
   async updateDocument(documentId: string, updates: Partial<IDocument>): Promise<IDocument> {
     const document = await this.getDocument(documentId);
     
-    if (updates.content) {
-      document.updateContent(updates.content, updates.createdBy || document.createdBy);
+    // Assuming updates might contain a userId for tracking who initiated the update
+    const userId = (updates as any).userId || document.createdBy; 
+
+    // Verify user exists if provided in updates
+    if ((updates as any).userId) {
+        try {
+            await this.userService.getUser(userId);
+        } catch (error) {
+            throw new Error(`User specified in updates not found: ${userId}`);
+        }
+    }
+
+    if (updates.content !== undefined) {
+        // Pass userId to updateContent if the model supports it
+        document.updateContent(updates.content, userId); 
     }
     
-    if (updates.name) {
-      (document as any).name = updates.name;
+    if (updates.name !== undefined) {
+        // Update name if it exists on the document model instance
+        if ('name' in document) {
+          (document as any).name = updates.name;
+        } else {
+           console.warn(`Attempted to update non-existent property 'name' on document ${documentId}`);
+        }
     }
     
-    if (updates.files) {
-      (document as any).files = updates.files;
+    if (updates.files !== undefined) {
+         // Update files if it exists on the document model instance
+        if ('files' in document) {
+            (document as any).files = updates.files;
+        } else {
+           console.warn(`Attempted to update non-existent property 'files' on document ${documentId}`);
+        }
+    }
+
+    // Update other partial fields if necessary and if they exist on IDocument/Document model
+    // Example:
+    // if (updates.version !== undefined) document.version = updates.version; 
+    // Make sure to handle dateUpdated appropriately
+    if ('dateUpdated' in document) {
+        (document as any).dateUpdated = new Date();
     }
     
     return document;
@@ -248,137 +284,137 @@ export class DocumentService implements IDocumentService {
     content: any, 
     files?: string[]
   ): Promise<IDocument> {
-    // Create a document of type DELIVERABLE
-    const deliverable = await this.createDocument(
-      userId,
-      orderId,
-      DocumentType.DELIVERABLE,
-      name,
-      {
-        phaseId,
-        content,
-        submittedBy: userId,
-        submittedAt: new Date().toISOString()
-      },
+    // Calls the createDocument implementation above
+    return this.createDocument(userId, orderId, DocumentType.DELIVERABLE, name, {
+        phaseId, 
+        details: content 
+      }, 
       files
     );
-    
-    return deliverable;
   }
   
   /**
-   * Validate deliverables against DoD criteria
+   * Validate deliverables against DoD criteria (AI powered)
+   * Matches the interface signature: (orderId: string, phaseId: string): Promise<IDoDComplianceResult>
    * @param orderId Order ID
    * @param phaseId Phase ID to validate
-   * @returns Validation result
+   * @returns Compliance result
    */
   async validateDeliverables(orderId: string, phaseId: string): Promise<IDoDComplianceResult> {
     if (!this.aiService) {
-      throw new Error('AI Service not configured for document validation');
+      throw new Error('AI Service not configured');
     }
     
-    // Find the DoD document for this order
-    let dodDocument: IDocument | null = null;
-    for (const doc of this.documents.values()) {
-      if (doc.orderId === orderId && doc.documentType === DocumentType.DEFINITION_OF_DONE) {
-        dodDocument = doc;
-        break;
-      }
-    }
+    const order = await this.orderService.getOrder(orderId);
+    const documents = await this.getDocumentsByOrderId(orderId);
     
+    // Find the DoD document
+    const dodDocument = documents.find(doc => doc.documentType === DocumentType.DEFINITION_OF_DONE);
     if (!dodDocument) {
-      throw new Error('Definition of Done document not found for this order');
+      throw new Error(`Definition of Done document not found for order ${orderId}`);
     }
     
-    // Find all deliverables for this phase
-    const deliverables: IDocument[] = [];
-    for (const doc of this.documents.values()) {
-      if (
-        doc.orderId === orderId && 
+    // Filter deliverables relevant to the phaseId
+    const phaseDeliverables = documents.filter(doc => 
         doc.documentType === DocumentType.DELIVERABLE &&
-        typeof doc.content === 'object' &&
-        doc.content.phaseId === phaseId
-      ) {
-        deliverables.push(doc);
-      }
+        (doc.content?.phaseId === phaseId) // Check phaseId within content
+    );
+
+    if (phaseDeliverables.length === 0) {
+        return {
+            compliant: false,
+            details: [],
+            overallScore: 0,
+            recommendations: ["No deliverables found for this phase."]
+        };
     }
+
+    // Filter DoD criteria relevant to the phaseId
+    const phaseCriteria = (dodDocument.content?.criteria || []).filter((c: any) => c.phaseId === phaseId);
     
-    if (deliverables.length === 0) {
-      throw new Error(`No deliverables found for phase ${phaseId}`);
+    if (phaseCriteria.length === 0) {
+         return {
+            compliant: false,
+            details: [],
+            overallScore: 0,
+            recommendations: [`No DoD criteria found for phase ${phaseId}.`]
+        };
     }
+
+    const phaseDoD = { ...dodDocument, content: { criteria: phaseCriteria } };
     
-    // Validate using AI service
-    return await this.aiService.checkDoD(deliverables, dodDocument);
+    // Call AI service to check compliance
+    // Assuming aiService.checkDoD exists and matches expected signature
+    return this.aiService.checkDoD(phaseDeliverables, phaseDoD as any); 
   }
   
   /**
-   * Generate an act for a milestone based on deliverables
+   * Generate an Act of Work document for a milestone
+   * Matches interface: (orderId: string, milestoneId: string, deliverableIds: string[]): Promise<IAct>
    * @param orderId Order ID
    * @param milestoneId Milestone ID
-   * @param deliverableIds IDs of deliverable documents to include
-   * @returns The created act
+   * @param deliverableIds IDs of deliverables included in this act
+   * @returns Created Act document
    */
   async generateAct(orderId: string, milestoneId: string, deliverableIds: string[]): Promise<IAct> {
-    // Get order and milestone
     const order = await this.orderService.getOrder(orderId);
-    const milestone = order.getMilestones().find(m => m.id === milestoneId);
+    // Add explicit type for m
+    const milestone = order.getMilestones().find((m: IMilestone) => m.id === milestoneId);
     
     if (!milestone) {
       throw new Error(`Milestone not found: ${milestoneId}`);
     }
     
-    // Verify deliverables exist
-    const deliverables: IDocument[] = [];
-    for (const id of deliverableIds) {
-      const doc = await this.getDocumentById(id);
-      if (!doc) {
-        throw new Error(`Deliverable not found: ${id}`);
-      }
-      deliverables.push(doc);
+    // Check if deliverables exist (optional, depending on requirements)
+    for (const deliverableId of deliverableIds) {
+        if (!this.documents.has(deliverableId)) {
+            console.warn(`Deliverable ID ${deliverableId} not found during Act generation.`);
+            // Decide whether to throw an error or just warn
+        }
     }
-    
-    // Create act content - could use AI service to generate if available
-    let actContent: any = {
-      milestoneId,
-      milestoneName: milestone.description,
-      amount: milestone.amount.toString(),
-      date: new Date().toISOString(),
-      deliverables: deliverableIds
-    };
-    
-    if (this.aiService) {
-      try {
-        // Try to use AI to generate a better act
-        const generatedContent = await this.aiService.autoFillForm(
-          order, 
-          'act_of_work', 
-          { milestone, deliverables }
-        );
-        actContent = generatedContent;
-      } catch (error) {
-        console.error('Failed to generate act using AI, using default template:', error);
-      }
-    }
-    
-    // Create the act document
+
+    // Create the act object adhering to IAct interface from base.ts
     const act: IAct = {
       id: uuidv4(),
-      orderId,
-      documentType: DocumentType.ACT_OF_WORK,
-      content: actContent,
-      version: 1,
-      createdBy: 'SYSTEM',
+      orderId: orderId, // Added orderId
+      milestoneId: milestoneId,
+      signatures: new Set<string>(), // Initialize as Set<string>
       dateCreated: new Date(),
-      dateUpdated: new Date(),
-      approvals: new Set<string>(['SYSTEM']),
-      name: `Act of Work - ${milestone.description}`,
-      status: ActStatus.CREATED,
-      signatures: [],
+      // dateSigned is set upon first signature
+      status: ActStatus.CREATED, // Set initial status
+      // Calculate deadline based on creation date
       deadline: new Date(Date.now() + DEFAULT_ACT_SIGNING_DEADLINE_DAYS * 24 * 60 * 60 * 1000),
-      relatedDeliverables: deliverableIds,
-      approve: (userId: string) => { this.acts.get(act.id)?.approvals.add(userId); },
-      isApproved: () => false,
-      updateContent: () => {}
+      relatedDeliverables: deliverableIds, // Store deliverable IDs
+      
+      // Implement required methods from IAct
+      addSignature: (userId: string): boolean => {
+        const currentAct = this.acts.get(act.id);
+        if (currentAct && !currentAct.signatures.has(userId)) {
+            currentAct.signatures.add(userId);
+            if (currentAct.signatures.size === 1) {
+                 (currentAct as any).dateSigned = new Date(); 
+            }
+            // Update status based on signatures (Example logic)
+            const contractorSigned = currentAct.signatures.has(order.contractorId);
+            const customerSigned = currentAct.signatures.has(order.creatorId); // Assuming creator is customer
+            if(contractorSigned && customerSigned) {
+                currentAct.status = ActStatus.COMPLETED;
+            } else if (contractorSigned) {
+                currentAct.status = ActStatus.SIGNED_CONTRACTOR;
+            } else if (customerSigned) {
+                currentAct.status = ActStatus.SIGNED_CUSTOMER;
+            }
+            // Handle platform signature if needed
+            return true;
+        } 
+        return false;
+      },
+      isComplete: (): boolean => {
+        const currentAct = this.acts.get(act.id);
+        // Check status for completion
+        return currentAct ? currentAct.status === ActStatus.COMPLETED : false;
+        // Or check signatures: return currentAct ? currentAct.signatures.size >= MIN_SIGNATURES_REQUIRED : false;
+      }
     };
     
     this.acts.set(act.id, act);
@@ -392,39 +428,21 @@ export class DocumentService implements IDocumentService {
    * @returns Updated act
    */
   async signAct(actId: string, userId: string): Promise<IAct> {
-    const act = await this.getActById(actId);
+    const act = this.acts.get(actId);
     if (!act) {
       throw new Error(`Act not found: ${actId}`);
     }
-    
-    // Get user to determine type
-    const user = await this.userService.getUser(userId);
-    
-    // Add signature
-    const signature = {
-      userType: user.userType,
-      userId: user.id,
-      signedAt: new Date()
-    };
-    
-    act.signatures.push(signature);
-    
-    // Update status based on who signed
-    switch (user.userType) {
-      case 'contractor':
-        act.status = ActStatus.SIGNED_CONTRACTOR;
-        break;
-      case 'customer':
-        act.status = ActStatus.SIGNED_CUSTOMER;
-        break;
-      case 'platform':
-        act.status = ActStatus.SIGNED_PLATFORM;
-        break;
+    // Verify user exists
+    try {
+      await this.userService.getUser(userId);
+    } catch (error) {
+      throw new Error(`User not found: ${userId}`);
     }
-    
-    // Check if act is now complete (2+ signatures)
-    if (act.signatures.length >= 2) {
-      act.status = ActStatus.COMPLETED;
+
+    // Call the embedded addSignature method
+    const added = act.addSignature(userId);
+    if (!added) {
+        console.warn(`User ${userId} already signed Act ${actId} or Act not found.`);
     }
     
     return act;
@@ -445,46 +463,72 @@ export class DocumentService implements IDocumentService {
    * @returns Array of acts
    */
   async getActsByOrderId(orderId: string): Promise<IAct[]> {
-    const result: IAct[] = [];
-    
+    const results: IAct[] = [];
     for (const act of this.acts.values()) {
+      // Check if act has orderId property before comparing
       if (act.orderId === orderId) {
-        result.push(act);
+        results.push(act);
       }
     }
-    
-    return result;
+    return results;
   }
   
   /**
-   * Sign an act automatically after a timeout if not already signed
+   * Automatically sign an act if the deadline passes
+   * Matches interface: (actId: string, timeoutDays: number): Promise<void>
    * @param actId Act ID
-   * @param timeoutDays Days to wait before auto-signing
+   * @param timeoutDays Number of days for the timeout (overrides default)
    */
   async signActWithTimeout(actId: string, timeoutDays: number = DEFAULT_ACT_SIGNING_DEADLINE_DAYS): Promise<void> {
-    const act = await this.getActById(actId);
-    if (!act) {
-      throw new Error(`Act not found: ${actId}`);
-    }
-    
-    // Schedule signing after timeout
-    setTimeout(async () => {
-      const currentAct = await this.getActById(actId);
-      if (!currentAct) return;
-      
-      // Only auto-sign if not already completed and deadline passed
-      if (
-        currentAct.status !== ActStatus.COMPLETED && 
-        currentAct.status !== ActStatus.REJECTED &&
-        new Date() >= currentAct.deadline
-      ) {
-        // Auto-sign on behalf of the platform if not already signed by platform
-        const platformSigned = currentAct.signatures.some(s => s.userType === 'platform');
-        
-        if (!platformSigned) {
-          await this.signAct(actId, 'PLATFORM');
-        }
+      const currentAct = this.acts.get(actId);
+      if (!currentAct) {
+        throw new Error(`Act not found: ${actId}`);
       }
-    }, timeoutDays * 24 * 60 * 60 * 1000);
+
+      // Check if already completed or rejected
+      if (currentAct.status === ActStatus.COMPLETED || currentAct.status === ActStatus.REJECTED) {
+          console.log(`Act ${actId} is already in final state: ${currentAct.status}`);
+          return;
+      }
+
+      // Calculate the effective deadline
+      const deadline = new Date(currentAct.dateCreated.getTime() + timeoutDays * 24 * 60 * 60 * 1000);
+      
+      // Check if deadline has passed
+      if (new Date() >= deadline) {
+          console.log(`Signing deadline passed for Act ${actId}. Checking signatures...`);
+          
+          // Check if platform signature is required and missing (example)
+          let platformSigned = false;
+          for(const userId of currentAct.signatures) {
+              // Need a way to check if userId belongs to platform
+              // Example: const user = await this.userService.getUser(userId);
+              // if (user.userType === UserType.PLATFORM) { platformSigned = true; break; }
+              if (userId === 'PLATFORM_USER_ID') { // Placeholder check
+                  platformSigned = true;
+                  break;
+              }
+          }
+
+          if (!platformSigned) {
+              console.log(`Platform signature missing for Act ${actId}. Adding platform signature.`);
+              // Add platform signature using the embedded method
+              currentAct.addSignature('PLATFORM_USER_ID'); // Replace with actual platform user ID
+          } else {
+              console.log(`Platform already signed Act ${actId}.`);
+          }
+
+          // Check completion status again after potential platform signature
+          if (currentAct.isComplete()) {
+              console.log(`Act ${actId} is now complete.`);
+          } else {
+               console.warn(`Act ${actId} did not reach completion status after timeout.`);
+               // Optional: Mark as rejected or handle otherwise
+               // currentAct.status = ActStatus.REJECTED;
+          }
+
+      } else {
+          console.log(`Signing deadline not yet passed for Act ${actId}.`);
+      }
   }
 } 

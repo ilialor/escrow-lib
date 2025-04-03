@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { IAIService, IDoRDocument, IRoadmapDocument, IDoDDocument, IDoDComplianceResult, IOrder, IDocument } from '../interfaces/services';
+import { IAIService, IDoRDocument, IRoadmapDocument, IDoDDocument, IDoDComplianceResult, IOrder, IDocument, IMilestone } from '../interfaces/services';
 import { DocumentType } from '../utils/constants';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -84,7 +84,7 @@ export class AIService implements IAIService {
   async generateRoadmap(order: IOrder): Promise<IRoadmapDocument> {
     try {
       const milestoneDescriptions = order.milestones.map(
-        (m, i) => `Milestone ${i + 1}: ${m.description} (Budget: ${m.amount})`
+        (m: IMilestone, i: number) => `Milestone ${i + 1}: ${m.description} (Budget: ${m.amount})`
       ).join('\n');
 
       const prompt = `
@@ -214,6 +214,41 @@ export class AIService implements IAIService {
   }
 
   /**
+   * PLACEHOLDER: Validate deliverables against DoD criteria
+   * This method needs implementation based on how validation should work (e.g., AI checks)
+   * @param orderId Order ID
+   * @param phaseId Optional phase ID
+   * @returns Validation result object
+   */
+   async validateDeliverables(orderId: string, phaseId?: string): Promise<{ compliant: boolean; feedback: string; suggestions?: string[] }> {
+       console.warn("AIService.validateDeliverables is not implemented.");
+       // In a real implementation, you would fetch deliverables and the DoD document,
+       // then potentially use an AI prompt to compare them against criteria.
+       // For now, return a placeholder indicating non-compliance.
+       return {
+           compliant: false,
+           feedback: "Validation not implemented.",
+           suggestions: []
+       };
+       // throw new Error('Method not implemented.');
+   }
+
+  /**
+   * PLACEHOLDER: Generate a specification document using AI
+   * @param orderId Order ID
+   * @param title Specification title
+   * @param description Specification description/outline
+   * @returns Generated specification document
+   */
+   async generateSpecification(orderId: string, title: string, description: string): Promise<IDocument> {
+       console.warn("AIService.generateSpecification is not implemented.");
+       // In a real implementation, you would construct a prompt based on title/description,
+       // call the AI, parse the response, and create an IDocument.
+       // For now, throw an error.
+       throw new Error('Method not implemented.');
+   }
+
+  /**
    * Check deliverables against DoD criteria
    * @param deliverables Array of submitted deliverable documents
    * @param dod DoD document with criteria
@@ -288,83 +323,19 @@ export class AIService implements IAIService {
    */
   async autoFillForm(order: IOrder, formType: string, additionalData?: any): Promise<any> {
     try {
-      // Create different prompts based on form type
-      let prompt = '';
-      let templateStructure = '';
-      
-      switch (formType) {
-        case 'act_of_work':
-          templateStructure = `{
-            "title": "Act of Work",
-            "orderDetails": {
-              "orderNumber": "string",
-              "orderTitle": "string",
-              "completionDate": "string"
-            },
-            "workCompleted": [
-              {
-                "description": "string",
-                "quantity": "number",
-                "unit": "string"
-              }
-            ],
-            "conclusion": "string",
-            "totalCost": "string"
-          }`;
-          
-          prompt = `
-            You are a contract specialist. Create an Act of Work in JSON format for the following completed order:
-            
-            Order title: ${order.title}
-            Order description: ${order.description}
-            Milestones: ${order.milestones.map(m => m.description).join(', ')}
-            Total cost: ${order.totalCost}
-            
-            Additional information:
-            ${JSON.stringify(additionalData || {})}
-            
-            Please format your response according to this template:
-            ${templateStructure}
-            
-            Only respond with the JSON object, no introduction or explanation.
-          `;
-          break;
-          
-        case 'specification':
-          templateStructure = `{
-            "projectName": "string",
-            "version": "string",
-            "overview": "string",
-            "requirements": [
-              {
-                "id": "string",
-                "description": "string",
-                "priority": "high/medium/low"
-              }
-            ],
-            "constraints": ["string"],
-            "assumptions": ["string"]
-          }`;
-          
-          prompt = `
-            You are a business analyst. Create a technical specification in JSON format for the following project:
-            
-            Project title: ${order.title}
-            Project description: ${order.description}
-            
-            Additional information:
-            ${JSON.stringify(additionalData || {})}
-            
-            Please format your response according to this template:
-            ${templateStructure}
-            
-            Only respond with the JSON object, no introduction or explanation.
-          `;
-          break;
-          
-        default:
-          throw new Error(`Unsupported form type: ${formType}`);
-      }
+      const prompt = `
+        Auto-fill the following form type: ${formType}
+        For the project: ${order.title} - ${order.description}
+        Creator: ${order.creatorId}
+        Contractor: ${order.contractorId || 'Not Assigned'}
+        Total Cost: ${order.totalCost}
+        Current Status: ${order.status}
+        Milestones: ${order.milestones.map((m: IMilestone) => m.description).join(', ')}
+        Additional Data: ${JSON.stringify(additionalData || {})}
+        
+        Provide the filled form data as a JSON object based on the formType.
+        Only respond with the JSON object.
+      `;
 
       const response = await this.callGeminiAPI(prompt);
       

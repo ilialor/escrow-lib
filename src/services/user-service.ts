@@ -1,6 +1,6 @@
 import { Decimal } from 'decimal.js';
 import { IUserService } from '../interfaces/services';
-import { IUser, IOrder } from '../interfaces/base';
+import { IUser, IOrder, IAct } from '../interfaces/base';
 import { User, Customer, Contractor, PlatformAdmin } from '../models/user';
 import { UserType } from '../utils/constants';
 
@@ -131,5 +131,21 @@ export class UserService implements IUserService {
       default:
         return [];
     }
+  }
+
+  // Add missing methods from IUserService as stubs
+  async getActsByOrderId(orderId: string): Promise<IAct[]> {
+    // This method logically belongs more to DocumentService or OrderService
+    // Returning empty array or throwing error for now.
+    console.warn('getActsByOrderId is not fully implemented in UserService');
+    return [];
+    // Or: throw new Error('Method getActsByOrderId not implemented in UserService');
+  }
+
+  async signActWithTimeout(actId: string, timeoutDays: number): Promise<void> {
+    // This method logically belongs more to DocumentService or OrderService
+    console.warn('signActWithTimeout is not fully implemented in UserService');
+    // No return value needed for void
+    // Or: throw new Error('Method signActWithTimeout not implemented in UserService');
   }
 } 

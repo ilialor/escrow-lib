@@ -1,26 +1,23 @@
-// Экспортируем только основной класс
+/**
+ * Escrow Library - главная точка входа
+ */
+
+// Импортируем и экспортируем класс EscrowManager
 import { EscrowManager } from './escrow-manager';
-
-export default EscrowManager;
 export { EscrowManager };
+export default EscrowManager;
 
-// Re-export models
-export * from './models';
-
-// Re-export interfaces
-export * from './interfaces/base';
-export * from './interfaces/services';
-
-// Re-export utils
-export * from './utils/constants';
-
-// Re-export services
+// Экспортируем сервисы
+export { UserService } from './services/user-service';
+export { OrderService } from './services/order-service';
+export { DocumentService } from './services/document-service';
 export { AIService } from './services/ai-service';
 
+// Экспортируем интерфейсы
 export * from './interfaces';
 
-// Реэкспортируем сервисы для возможного расширения
-export { UserService } from './services/UserService';
-export { OrderService } from './services/OrderService';
-export { DocumentService } from './services/DocumentService';
-export { AIService } from './services/AIService'; 
+// Экспортируем константы
+// export * from './utils/constants'; // Removed to avoid export conflicts
+
+// Экспортируем модели
+// export * from './models'; // Removed to avoid export conflicts 

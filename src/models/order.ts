@@ -14,7 +14,7 @@ export class Order implements IOrder {
   creatorId: string;
   contractorId?: string;
   representativeId: string;
-  milestones: Milestone[];
+  milestones: IMilestone[];
   totalCost: Decimal;
   escrowBalance: Decimal;
   status: OrderStatus;
