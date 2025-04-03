@@ -1,5 +1,5 @@
 import { Decimal } from 'decimal.js';
-import { UserType, OrderStatus, MilestoneStatus, DocumentType, MessageType } from '../utils/constants';
+import { UserType, OrderStatus, MilestoneStatus, DocumentType, MessageType, ActStatus } from '../utils/constants';
 
 export interface IUser {
   id: string;
@@ -64,16 +64,18 @@ export interface IDocument {
   id: string;
   orderId: string;
   documentType: DocumentType;
-  content: string;
+  content: any;
   version: number;
   createdBy: string;
   dateCreated: Date;
   dateUpdated: Date;
   approvals: Set<string>;
+  name?: string;
+  files?: string[];
   
   approve(userId: string): void;
   isApproved(): boolean;
-  updateContent(content: string, userId: string): void;
+  updateContent(content: any, userId: string): void;
 }
 
 export interface IMessage {

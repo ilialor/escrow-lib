@@ -1,3 +1,9 @@
+// Экспортируем только основной класс
+import { EscrowManager } from './escrow-manager';
+
+export default EscrowManager;
+export { EscrowManager };
+
 // Re-export models
 export * from './models';
 
@@ -8,9 +14,13 @@ export * from './interfaces/services';
 // Re-export utils
 export * from './utils/constants';
 
-// Re-export main manager
-export * from './escrow-manager';
+// Re-export services
+export { AIService } from './services/ai-service';
 
-// Default export
-import { EscrowManager } from './escrow-manager';
-export default EscrowManager; 
+export * from './interfaces';
+
+// Реэкспортируем сервисы для возможного расширения
+export { UserService } from './services/UserService';
+export { OrderService } from './services/OrderService';
+export { DocumentService } from './services/DocumentService';
+export { AIService } from './services/AIService'; 

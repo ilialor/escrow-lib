@@ -1,10 +1,19 @@
 # Escrow Library
 
-Модульная библиотека для управления условными депозитами (escrow) и групповыми заказами с поддержкой распределения взносов, голосования, оформления документов и коммуникации между участниками.
+Библиотека для управления эскроу-счетами и групповыми заказами с функциями коммуникации, документооборота и AI-интеграции.
 
-## Описание
+## Возможности
 
-Escrow Library предоставляет инструменты для управления групповыми заказами, где несколько заказчиков могут совместно финансировать проект, выбирать представителя и взаимодействовать с исполнителями. Библиотека обеспечивает безопасное хранение средств на эскроу-счетах и их поэтапное высвобождение после подтверждения выполнения работ.
+- **Управление пользователями** - создание пользователей с различными ролями (заказчик, исполнитель, платформа)
+- **Управление заказами** - создание, изменение и управление заказами
+- **Групповые заказы** - поддержка заказов с несколькими участниками
+- **Вехи** - разделение проектов на этапы с отдельными бюджетами
+- **Эскроу-счета** - безопасное хранение средств до подтверждения выполнения работ
+- **Акты** - формирование и подписание актов выполненных работ
+- **Голосование** - система голосования для изменения представителя группы
+- **Документы** - хранение и управление документами проекта
+- **Коммуникация** - система обсуждений и сообщений внутри проектов
+- **AI-интеграция** - автоматическая генерация документов и проверка соответствия критериям с использованием Google Gemini
 
 ## Установка
 
@@ -12,95 +21,119 @@ Escrow Library предоставляет инструменты для упра
 npm install escrow-lib
 ```
 
-## Основные возможности
-
-- **Управление пользователями**: создание и аутентификация пользователей различных типов
-- **Управление заказами**: создание заказов, установка вех (milestones), контроль статусов
-- **Групповые заказы**: создание заказов с несколькими заказчиками и распределением взносов
-- **Вехи (Milestones)**: разделение работы на этапы с отдельными бюджетами
-- **Эскроу-счета**: безопасное хранение средств до подтверждения выполнения работ
-- **Акты выполненных работ**: цифровая подпись для подтверждения завершения этапов
-- **Голосование**: механизм для выбора представителя группы заказчиков
-- **Документы**: хранение и утверждение документов, связанных с заказом
-- **Коммуникация**: обсуждения и обмен сообщениями между участниками заказа
-
-## Ключевые концепции
+## Основные понятия
 
 ### Пользователи
 
-Библиотека поддерживает три типа пользователей:
-- **Заказчик (Customer)**: создает заказы и вносит средства
-- **Исполнитель (Contractor)**: выполняет работы и получает оплату
-- **Платформа (Platform)**: административные функции и арбитраж
+В системе существуют три типа пользователей:
+- **Заказчик (Customer)** - создает заказы и оплачивает их
+- **Исполнитель (Contractor)** - выполняет работы по заказам
+- **Платформа (Platform)** - выступает арбитром, взимает комиссию
 
-### Заказы и групповые заказы
+### Заказы и вехи
 
-- Индивидуальные заказы создаются одним заказчиком
-- Групповые заказы могут иметь нескольких участников с разными долями
-- Представитель группы выбирается голосованием и представляет интересы всех заказчиков
-- Заказы разделяются на вехи с отдельными бюджетами и сроками выполнения
+Заказы содержат одну или несколько вех (milestones), каждая со своим бюджетом и описанием работ. Средства хранятся на эскроу-счете заказа и освобождаются по мере выполнения вех.
+
+### Акты приемки
+
+По завершении вехи исполнитель формирует акт выполненных работ, который должен быть подписан исполнителем и заказчиком (или представителем группы заказчиков).
+
+### Документы
+
+Система поддерживает различные типы документов, включая Definition of Ready (DoR), Definition of Done (DoD), дорожные карты и результаты работ, с возможностью автоматической генерации и проверки с использованием AI.
 
 ## Пример использования
 
 ```typescript
-import { EscrowManager, UserType } from 'escrow-lib';
+import { EscrowManager, UserType, OrderStatus } from 'escrow-lib';
 
-// Создаем экземпляр менеджера
-const escrowManager = new EscrowManager();
+// Инициализация с поддержкой AI
+const escrowManager = new EscrowManager('ваш-gemini-api-ключ');
 
-// Создаем пользователей
-async function main() {
-  // Создаем заказчиков и исполнителя
-  const customer1 = await escrowManager.createUser('Customer 1', UserType.CUSTOMER);
-  const customer2 = await escrowManager.createUser('Customer 2', UserType.CUSTOMER);
-  const contractor = await escrowManager.createUser('Contractor', UserType.CONTRACTOR);
-  
-  // Пополняем балансы
-  await escrowManager.deposit(customer1.id, '600');
-  await escrowManager.deposit(customer2.id, '400');
-  
-  // Создаем групповой заказ
-  const groupOrder = await escrowManager.createGroupOrder(
-    [customer1.id, customer2.id],
-    'Групповой проект',
-    'Описание проекта',
-    [{ description: 'Полный объем работ', amount: '1000' }]
+// Создание пользователей
+const customer = await escrowManager.createUser('Иван', UserType.CUSTOMER);
+const contractor = await escrowManager.createUser('Сергей', UserType.CONTRACTOR);
+
+// Пополнение баланса заказчика
+await escrowManager.deposit(customer.id, '1000');
+
+// Создание заказа с вехами
+const order = await escrowManager.createOrder(
+  customer.id,
+  'Разработка сайта',
+  'Создание корпоративного сайта',
+  [
+    { description: 'Дизайн', amount: '300', deadline: new Date('2023-12-15') },
+    { description: 'Верстка', amount: '300', deadline: new Date('2023-12-31') },
+    { description: 'Программирование', amount: '400', deadline: new Date('2024-01-31') }
+  ]
+);
+
+// Назначение исполнителя
+await escrowManager.assignContractor(order.id, contractor.id);
+
+// Финансирование заказа
+await escrowManager.contributeFunds(order.id, customer.id, '1000');
+
+// Автоматическая генерация документов с помощью AI
+const dor = await escrowManager.generateDoR(order.id);
+const roadmap = await escrowManager.generateRoadmap(order.id);
+const dod = await escrowManager.generateDoD(order.id);
+
+// Отправка результатов работы
+const deliverable = await escrowManager.submitDeliverable(
+  contractor.id,
+  order.id,
+  roadmap.content.phases[0].id,
+  'Дизайн сайта',
+  { description: 'Готовый дизайн всех страниц' },
+  ['design1.png', 'design2.png']
+);
+
+// Проверка результатов на соответствие DoD
+const validationResult = await escrowManager.validateDeliverables(
+  order.id,
+  roadmap.content.phases[0].id
+);
+
+// Если результаты соответствуют требованиям, создаем акт
+if (validationResult.compliant) {
+  // Создание акта выполненных работ
+  const act = await escrowManager.generateAct(
+    order.id,
+    order.milestones[0].id,
+    [deliverable.id]
   );
   
-  // Финансируем заказ
-  await escrowManager.contributeFunds(groupOrder.id, customer1.id, '600');
-  await escrowManager.contributeFunds(groupOrder.id, customer2.id, '400');
+  // Подписание акта исполнителем
+  await escrowManager.signActDocument(act.id, contractor.id);
   
-  // Назначаем исполнителя
-  await escrowManager.assignContractor(groupOrder.id, contractor.id);
-  
-  // Отслеживаем события
-  escrowManager.on('milestone:completed', ({ orderId, milestoneId }) => {
-    console.log(`Веха ${milestoneId} заказа ${orderId} завершена`);
-  });
+  // Подписание акта заказчиком
+  await escrowManager.signActDocument(act.id, customer.id);
 }
 
-main().catch(console.error);
+// Подписка на события
+escrowManager.on('milestone:completed', data => {
+  console.log(`Веха ${data.milestoneId} помечена как выполненная`);
+});
+
+escrowManager.on('act:signed', data => {
+  console.log(`Акт ${data.actId} подписан пользователем ${data.userId}`);
+});
 ```
 
 ## Документация
 
-Полная документация доступна в директории `docs`.
+Подробная документация доступна в директории [docs](docs):
 
-## Архитектура
-
-Библиотека имеет модульную архитектуру:
-
-- **Models**: базовые сущности (User, Order, Milestone, Act, Document, Message)
-- **Services**: логика работы с сущностями (UserService, OrderService и т.д.)
-- **Interfaces**: определения типов и интерфейсов
-- **Utils**: вспомогательные функции и константы
-
-## Тестирование
-
-```bash
-npm test
-```
+- [README.md](docs/README.md) - Общая информация
+- [users.md](docs/users.md) - Управление пользователями
+- [orders.md](docs/orders.md) - Управление заказами и вехами
+- [group-orders.md](docs/group-orders.md) - Групповые заказы
+- [documents.md](docs/documents.md) - Работа с документами
+- [document-management.md](docs/document-management.md) - Документооборот с AI
+- [communication.md](docs/communication.md) - Система коммуникации
+- [events.md](docs/events.md) - События и подписки
 
 ## Лицензия
 

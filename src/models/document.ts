@@ -9,19 +9,23 @@ export class Document implements IDocument {
   id: string;
   orderId: string;
   documentType: DocumentType;
-  content: string;
+  content: any;
   version: number;
   createdBy: string;
   dateCreated: Date;
   dateUpdated: Date;
   approvals: Set<string>;
+  name?: string;
+  files?: string[];
 
   constructor(
     orderId: string,
     documentType: DocumentType,
-    content: string,
+    content: any,
     createdBy: string,
-    id?: string
+    id?: string,
+    name?: string,
+    files?: string[]
   ) {
     this.id = id || uuidv4();
     this.orderId = orderId;
@@ -32,6 +36,8 @@ export class Document implements IDocument {
     this.dateCreated = new Date();
     this.dateUpdated = new Date();
     this.approvals = new Set<string>();
+    this.name = name;
+    this.files = files;
     
     // Creator automatically approves the document
     this.approvals.add(createdBy);
@@ -60,7 +66,7 @@ export class Document implements IDocument {
    * @param content New content
    * @param userId ID of the user making the update
    */
-  updateContent(content: string, userId: string): void {
+  updateContent(content: any, userId: string): void {
     this.content = content;
     this.version += 1;
     this.dateUpdated = new Date();

@@ -8,6 +8,8 @@ import {
   CommunicationService 
 } from './services';
 
+import { AIService } from './services/ai-service';
+
 import { 
   IUser, 
   IOrder, 
@@ -24,6 +26,13 @@ import {
   DocumentType,
   MessageType
 } from './utils/constants';
+
+import {
+  IDoRDocument,
+  IRoadmapDocument,
+  IDoDDocument,
+  IDoDComplianceResult
+} from './interfaces/services';
 
 /**
  * Events emitted by the EscrowManager
@@ -49,7 +58,13 @@ export enum EscrowEvents {
   DOCUMENT_APPROVED = 'document:approved',
   
   DISCUSSION_CREATED = 'discussion:created',
-  MESSAGE_SENT = 'message:sent'
+  MESSAGE_SENT = 'message:sent',
+  
+  DOR_GENERATED = 'dor:generated',
+  ROADMAP_GENERATED = 'roadmap:generated',
+  DOD_GENERATED = 'dod:generated',
+  DELIVERABLE_SUBMITTED = 'deliverable:submitted',
+  DELIVERABLE_VALIDATED = 'deliverable:validated'
 }
 
 /**
@@ -60,23 +75,43 @@ export class EscrowManager {
   private orderService: OrderService;
   private documentService: DocumentService;
   private communicationService: CommunicationService;
+  private aiService: AIService | null = null;
   private eventEmitter: EventEmitter;
   
-  constructor() {
+  constructor(aiApiKey?: string) {
     // Initialize services
     this.userService = new UserService();
     this.orderService = new OrderService();
     this.documentService = new DocumentService();
     this.communicationService = new CommunicationService();
     
+    // Initialize AI service if API key is provided
+    if (aiApiKey) {
+      this.aiService = new AIService();
+      this.aiService.setApiKey(aiApiKey);
+    }
+    
     // Set up cross-service dependencies
     this.userService.setOrderService(this.orderService);
     this.orderService.setUserService(this.userService);
-    this.documentService.setServices(this.orderService, this.userService);
+    this.documentService.setServices(this.orderService, this.userService, this.aiService || undefined);
     this.communicationService.setServices(this.orderService, this.userService);
     
     // Initialize event emitter
     this.eventEmitter = new EventEmitter();
+  }
+  
+  /**
+   * Set Google Gemini API key for AI features
+   * @param apiKey Google Gemini API key
+   */
+  setAiApiKey(apiKey: string): void {
+    if (!this.aiService) {
+      this.aiService = new AIService();
+      this.documentService.setServices(this.orderService, this.userService, this.aiService);
+    }
+    
+    this.aiService.setApiKey(apiKey);
   }
   
   /**
@@ -528,5 +563,205 @@ export class EscrowManager {
    */
   async markMessageAsRead(messageId: string, userId: string): Promise<boolean> {
     return this.communicationService.markMessageAsRead(messageId, userId);
+  }
+  
+  // Document Management with AI
+  
+  /**
+   * Generate a Definition of Ready document for an order
+   * @param orderId Order ID
+   * @returns Generated DoR document
+   */
+  async generateDoR(orderId: string): Promise<IDoRDocument> {
+    if (!this.aiService) {
+      throw new Error('AI service not initialized. Call setAiApiKey() first.');
+    }
+    
+    const order = await this.getOrder(orderId);
+    const dorDocument = await this.aiService.generateDoR(order);
+    
+    // Store the document
+    await this.documentService.createDocument(
+      'SYSTEM',
+      orderId,
+      DocumentType.DEFINITION_OF_READY,
+      'Definition of Ready',
+      dorDocument.content
+    );
+    
+    this.emit(EscrowEvents.DOR_GENERATED, { orderId, dor: dorDocument });
+    this.emit(EscrowEvents.DOCUMENT_CREATED, dorDocument);
+    
+    return dorDocument;
+  }
+  
+  /**
+   * Generate a roadmap document for an order
+   * @param orderId Order ID
+   * @returns Generated roadmap document
+   */
+  async generateRoadmap(orderId: string): Promise<IRoadmapDocument> {
+    if (!this.aiService) {
+      throw new Error('AI service not initialized. Call setAiApiKey() first.');
+    }
+    
+    const order = await this.getOrder(orderId);
+    const roadmapDocument = await this.aiService.generateRoadmap(order);
+    
+    // Store the document
+    await this.documentService.createDocument(
+      'SYSTEM',
+      orderId,
+      DocumentType.ROADMAP,
+      'Project Roadmap',
+      roadmapDocument.content
+    );
+    
+    this.emit(EscrowEvents.ROADMAP_GENERATED, { orderId, roadmap: roadmapDocument });
+    this.emit(EscrowEvents.DOCUMENT_CREATED, roadmapDocument);
+    
+    return roadmapDocument;
+  }
+  
+  /**
+   * Generate a Definition of Done document for an order
+   * @param orderId Order ID
+   * @returns Generated DoD document
+   */
+  async generateDoD(orderId: string): Promise<IDoDDocument> {
+    if (!this.aiService) {
+      throw new Error('AI service not initialized. Call setAiApiKey() first.');
+    }
+    
+    const order = await this.getOrder(orderId);
+    
+    // Find roadmap document
+    const documents = await this.documentService.getDocumentsByOrderId(orderId);
+    let roadmapDocument: IRoadmapDocument | null = null;
+    
+    for (const doc of documents) {
+      if (doc.documentType === DocumentType.ROADMAP) {
+        roadmapDocument = doc as IRoadmapDocument;
+        break;
+      }
+    }
+    
+    if (!roadmapDocument) {
+      throw new Error('Roadmap document required to generate Definition of Done');
+    }
+    
+    const dodDocument = await this.aiService.generateDoD(order, roadmapDocument);
+    
+    // Store the document
+    await this.documentService.createDocument(
+      'SYSTEM',
+      orderId,
+      DocumentType.DEFINITION_OF_DONE,
+      'Definition of Done',
+      dodDocument.content
+    );
+    
+    this.emit(EscrowEvents.DOD_GENERATED, { orderId, dod: dodDocument });
+    this.emit(EscrowEvents.DOCUMENT_CREATED, dodDocument);
+    
+    return dodDocument;
+  }
+  
+  /**
+   * Submit a deliverable for a phase of a project
+   * @param userId User ID
+   * @param orderId Order ID
+   * @param phaseId Phase ID
+   * @param name Deliverable name
+   * @param content Deliverable content
+   * @param files Optional files
+   * @returns Submitted deliverable document
+   */
+  async submitDeliverable(
+    userId: string,
+    orderId: string,
+    phaseId: string,
+    name: string,
+    content: any,
+    files?: string[]
+  ): Promise<IDocument> {
+    const deliverable = await this.documentService.submitDeliverable(
+      userId, orderId, phaseId, name, content, files
+    );
+    
+    this.emit(EscrowEvents.DELIVERABLE_SUBMITTED, { 
+      orderId, phaseId, deliverable, userId 
+    });
+    
+    return deliverable;
+  }
+  
+  /**
+   * Validate deliverables against DoD criteria
+   * @param orderId Order ID
+   * @param phaseId Phase ID
+   * @returns Validation results
+   */
+  async validateDeliverables(orderId: string, phaseId: string): Promise<IDoDComplianceResult> {
+    if (!this.aiService) {
+      throw new Error('AI service not initialized. Call setAiApiKey() first.');
+    }
+    
+    const result = await this.documentService.validateDeliverables(orderId, phaseId);
+    
+    this.emit(EscrowEvents.DELIVERABLE_VALIDATED, {
+      orderId,
+      phaseId,
+      compliant: result.compliant,
+      score: result.overallScore
+    });
+    
+    return result;
+  }
+  
+  /**
+   * Generate an act for a milestone with specified deliverables
+   * @param orderId Order ID
+   * @param milestoneId Milestone ID
+   * @param deliverableIds IDs of deliverable documents
+   * @returns The generated act
+   */
+  async generateAct(
+    orderId: string,
+    milestoneId: string,
+    deliverableIds: string[]
+  ): Promise<IAct> {
+    const act = await this.documentService.generateAct(orderId, milestoneId, deliverableIds);
+    
+    this.emit(EscrowEvents.ACT_CREATED, act);
+    
+    return act;
+  }
+  
+  /**
+   * Sign an act using the document service
+   * @param actId Act ID
+   * @param userId User ID signing the act
+   * @returns The updated act
+   */
+  async signActDocument(actId: string, userId: string): Promise<IAct> {
+    const act = await this.documentService.signAct(actId, userId);
+    
+    this.emit(EscrowEvents.ACT_SIGNED, { actId, userId });
+    
+    if (act.status === 'completed') {
+      this.emit(EscrowEvents.ACT_COMPLETED, { actId });
+    }
+    
+    return act;
+  }
+  
+  /**
+   * Set automatic signing timeout for an act
+   * @param actId Act ID
+   * @param timeoutDays Number of days until auto-signing
+   */
+  async setupActAutoSigning(actId: string, timeoutDays?: number): Promise<void> {
+    await this.documentService.signActWithTimeout(actId, timeoutDays);
   }
 } 

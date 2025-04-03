@@ -5,37 +5,57 @@
 export const PLATFORM_SIGNATURE_ID = 'PLATFORM';
 
 export enum OrderStatus {
-  CREATED = 'CREATED',
-  FUNDED = 'FUNDED',
-  IN_PROGRESS = 'IN_PROGRESS',
-  COMPLETED = 'COMPLETED',
-  CANCELED = 'CANCELED'
+  CREATED = 'created',
+  FUNDED = 'funded',
+  IN_PROGRESS = 'in_progress',
+  COMPLETED = 'completed',
+  CANCELLED = 'cancelled'
 }
 
 export enum MilestoneStatus {
-  PENDING = 'PENDING',
-  IN_PROGRESS = 'IN_PROGRESS',
-  COMPLETED = 'COMPLETED',
-  PAID = 'PAID',
-  CANCELED = 'CANCELED'
+  PENDING = 'pending',
+  COMPLETED = 'completed',
+  PAID = 'paid'
 }
 
 export enum UserType {
-  CUSTOMER = 'CUSTOMER',
-  CONTRACTOR = 'CONTRACTOR',
-  PLATFORM = 'PLATFORM'
+  CUSTOMER = 'customer',
+  CONTRACTOR = 'contractor',
+  PLATFORM = 'platform'
 }
 
 export enum DocumentType {
-  DEFINITION_OF_READY = 'DEFINITION_OF_READY',
-  DEFINITION_OF_DONE = 'DEFINITION_OF_DONE',
-  ROADMAP = 'ROADMAP'
+  DEFINITION_OF_READY = 'definition_of_ready',
+  DEFINITION_OF_DONE = 'definition_of_done',
+  ROADMAP = 'roadmap',
+  ACT_OF_WORK = 'act_of_work',
+  DELIVERABLE = 'deliverable',
+  SPECIFICATION = 'specification'
 }
 
 export enum MessageType {
-  TEXT = 'TEXT',
-  FILE = 'FILE',
-  SYSTEM = 'SYSTEM'
+  TEXT = 'text',
+  FILE = 'file',
+  SYSTEM = 'system'
+}
+
+export enum ActStatus {
+  CREATED = 'created',
+  SIGNED_CONTRACTOR = 'signed_contractor',
+  SIGNED_CUSTOMER = 'signed_customer',
+  SIGNED_PLATFORM = 'signed_platform',
+  COMPLETED = 'completed',
+  REJECTED = 'rejected'
+}
+
+export enum DeliverableType {
+  DOCUMENT = 'document',
+  CODE = 'code',
+  DESIGN = 'design',
+  IMAGE = 'image',
+  VIDEO = 'video',
+  AUDIO = 'audio',
+  OTHER = 'other'
 }
 
 // Minimum number of signatures required to complete an act
@@ -48,4 +68,9 @@ export const REP_VOTE_THRESHOLD_PERCENT = 75;
 export const MAX_MESSAGE_LENGTH = 2000;
 
 // Default pagination sizes
-export const DEFAULT_PAGE_SIZE = 20; 
+export const DEFAULT_PAGE_SIZE = 20;
+
+/**
+ * Default deadline for signing acts in days
+ */
+export const DEFAULT_ACT_SIGNING_DEADLINE_DAYS = 3; 
