@@ -1,6 +1,6 @@
 # Escrow Library
 
-Библиотека для управления эскроу-счетами и групповыми заказами. Позволяет создавать и управлять групповыми заказами, с возможностью вступления участников, голосования и смены представителя заказчика квалифицированным большинством, сбора средств на балансы участников и эскроу-счета, оформления документов (DoR, DoD и дорожных карт), оформления актов, коммуникации между участниками и выплат на балансы исполнителей.
+Escrow Library - это модульная библиотека, предназначенная для управления условными депозитами (escrow) в групповых заказах. Она обеспечивает безопасное хранение средств, поэтапные выплаты и коммуникацию между участниками.
 
 ## Установка
 
@@ -10,156 +10,203 @@ npm install escrow-lib
 
 ## Основные возможности
 
-- **Управление пользователями**: создание и управление заказчиками и исполнителями
-- **Управление заказами**: создание, финансирование и выполнение заказов
-- **Групповые заказы**: возможность объединения нескольких заказчиков
-- **Вехи (milestones)**: разделение заказа на этапы с отдельными выплатами
-- **Эскроу-счета**: безопасное хранение средств до выполнения условий
-- **Акты**: подтверждение выполнения работ с подписями сторон
-- **Голосование**: смена представителя квалифицированным большинством
-- **Документы**: создание и согласование DoR, DoD и дорожных карт
-- **Коммуникация**: обсуждения и обмен сообщениями между участниками
+- **Управление пользователями**: создание и аутентификация пользователей различных типов (заказчики, исполнители, администраторы платформы)
+- **Управление заказами**: создание заказов, установка вех (milestones), контроль статусов
+- **Групповые заказы**: создание заказов с несколькими участниками-заказчиками, распределение взносов
+- **Вехи (Milestones)**: разделение работы на этапы с отдельными бюджетами
+- **Эскроу-счета**: безопасное хранение средств до подтверждения выполнения работ
+- **Акты выполненных работ**: цифровая подпись для подтверждения завершения этапов
+- **Голосование**: механизм для выбора представителя группы заказчиков
+- **Документы**: хранение и утверждение документов, связанных с заказом
+- **Коммуникация**: обсуждения и обмен сообщениями между участниками заказа
 
-## Основные концепции
+## Ключевые концепции
 
 ### Пользователи
 
-В системе существует три типа пользователей:
-- **Заказчик (Customer)**: может создавать заказы, вносить средства и голосовать
-- **Исполнитель (Contractor)**: выполняет работы по заказам и получает оплату
-- **Платформа (Platform)**: системная роль для административных функций
+Библиотека поддерживает три типа пользователей:
+- **Заказчик (Customer)**: создает заказы и вносит средства
+- **Исполнитель (Contractor)**: выполняет работы и получает оплату
+- **Платформа (Platform)**: административные функции и арбитраж
 
 ### Заказы
 
-Заказ представляет собой договор между заказчиками и исполнителем. Каждый заказ имеет:
-- Описание работ
-- Набор вех (milestone)
-- Эскроу-счет для хранения средств
-- Представителя заказчиков
-- Документы (DoR, DoD, roadmap)
-- Дискуссии для коммуникации
+Заказы содержат информацию о работе, бюджете и участниках:
+- Индивидуальные заказы создаются одним заказчиком
+- Групповые заказы могут иметь нескольких заказчиков с разными долями участия
+- Заказы проходят через различные статусы: от создания до завершения
+- Заказы могут включать несколько вех (milestones) с отдельными бюджетами
 
-### Вехи и акты
+### Групповые заказы
 
-Каждая веха представляет собой часть работы, которая должна быть выполнена. После завершения вехи:
-1. Исполнитель отмечает веху как выполненную
-2. Создается акт выполненных работ
-3. Участники (исполнитель, представитель заказчиков, платформа) подписывают акт
-4. После необходимого количества подписей средства переводятся на баланс исполнителя
+Особая функция библиотеки - работа с групповыми заказами:
+- Несколько заказчиков могут участвовать в одном заказе
+- Каждый заказчик может вносить разную сумму для финансирования
+- Представитель группы выбирается через голосование и представляет интересы всех заказчиков
+- Все участники могут отслеживать статус заказа и участвовать в коммуникации
 
-### Голосование
+### Акты и оплата
 
-Участники заказа могут инициировать голосование за нового представителя. Если кандидат набирает голоса, представляющие 75% от стоимости заказа, он становится новым представителем.
-
-### Коммуникация
-
-Участники могут создавать дискуссии и обмениваться сообщениями в рамках заказа для обсуждения деталей, согласования изменений и решения вопросов.
+- Исполнитель отмечает вехи как завершенные, создавая акт выполненных работ
+- Акт подписывается исполнителем и представителем заказчиков
+- После подписания акта средства автоматически переводятся исполнителю
 
 ## Использование
 
+### Базовый пример
+
 ```typescript
-import EscrowManager, { UserType, DocumentType } from 'escrow-lib';
+import { EscrowManager, UserType, OrderStatus } from 'escrow-lib';
 
-// Создание менеджера эскроу
-const escrow = new EscrowManager();
+// Создаем экземпляр менеджера
+const escrowManager = new EscrowManager();
 
-// Пример основного потока работы
-async function workflowExample() {
-  // Создание пользователей
-  const customer = await escrow.createUser('Заказчик', UserType.CUSTOMER);
-  const contractor = await escrow.createUser('Исполнитель', UserType.CONTRACTOR);
+// Создаем пользователей
+async function setupUsers() {
+  const customer = await escrowManager.createUser('Alice', UserType.CUSTOMER);
+  const contractor = await escrowManager.createUser('Bob', UserType.CONTRACTOR);
   
-  // Пополнение баланса заказчика
-  await escrow.deposit(customer.id, '1000');
+  // Пополняем баланс заказчика
+  await escrowManager.deposit(customer.id, '1000');
   
-  // Создание заказа с вехами
-  const order = await escrow.createOrder(
-    customer.id,
+  return { customer, contractor };
+}
+
+// Создаем заказ
+async function createOrder(customerId) {
+  const milestones = [
+    { description: 'Первый этап работ', amount: '300' },
+    { description: 'Второй этап работ', amount: '700' }
+  ];
+  
+  const order = await escrowManager.createOrder(
+    customerId,
     'Название заказа',
     'Описание заказа',
-    [
-      { description: 'Первая веха', amount: '400' },
-      { description: 'Вторая веха', amount: '600' }
-    ]
+    milestones
   );
   
-  // Финансирование заказа
-  await escrow.contributeFunds(order.id, customer.id, '1000');
+  return order;
+}
+
+// Создаем групповой заказ
+async function createGroupOrder(customerIds) {
+  const milestones = [
+    { description: 'Первый этап работ', amount: '500' },
+    { description: 'Второй этап работ', amount: '500' }
+  ];
   
-  // Назначение исполнителя
-  await escrow.assignContractor(order.id, contractor.id);
-  
-  // Создание документа "Определение готовности"
-  const dor = await escrow.createDocument(
-    order.id,
-    DocumentType.DEFINITION_OF_READY,
-    'Содержание документа "Определение готовности"',
-    customer.id
+  const order = await escrowManager.createGroupOrder(
+    customerIds,
+    'Групповой заказ',
+    'Описание группового заказа',
+    milestones
   );
   
-  // Исполнитель утверждает документ
-  await escrow.approveDocument(dor.id, contractor.id);
+  return order;
+}
+
+// Финансируем групповой заказ
+async function fundGroupOrder(orderId, contributionsMap) {
+  for (const [userId, amount] of Object.entries(contributionsMap)) {
+    await escrowManager.contributeFunds(orderId, userId, amount);
+  }
   
-  // Создание обсуждения
-  const discussion = await escrow.createDiscussion(
-    order.id,
-    'Обсуждение заказа',
-    contractor.id
+  const order = await escrowManager.getOrder(orderId);
+  return order;
+}
+
+// Пример работы с документами
+async function handleDocuments(orderId, customerId, contractorId) {
+  // Создаем документ
+  const document = await escrowManager.createDocument(
+    orderId,
+    'DEFINITION_OF_READY',
+    'Содержимое документа...',
+    customerId
   );
   
-  // Обмен сообщениями
-  await escrow.sendMessage(
-    discussion.id,
-    contractor.id,
-    'Начинаю работу над заказом'
-  );
-  
-  // Отметка первой вехи как выполненной
-  const act = await escrow.markMilestoneComplete(
-    order.id,
-    order.milestones[0].id,
-    contractor.id
-  );
-  
-  // Подписание акта сторонами
-  await escrow.signAct(act.id, contractor.id);
-  await escrow.signAct(act.id, customer.id);
-  
-  // Проверка баланса исполнителя после выплаты
-  const updatedContractor = await escrow.getUser(contractor.id);
-  console.log(`Баланс исполнителя: ${updatedContractor.balance}`);
+  // Утверждаем документ
+  await escrowManager.approveDocument(document.id, contractorId);
 }
 ```
 
-## События
+### События
 
 Библиотека использует систему событий для отслеживания изменений:
 
 ```typescript
-import { EscrowEvents } from 'escrow-lib';
-
-// Подписка на события
-escrow.on(EscrowEvents.ORDER_CREATED, (order) => {
+// Подписываемся на события создания заказа
+escrowManager.on('order:created', (order) => {
   console.log(`Создан новый заказ: ${order.title}`);
 });
 
-escrow.on(EscrowEvents.MILESTONE_COMPLETED, ({ orderId, milestoneId }) => {
-  console.log(`Веха ${milestoneId} заказа ${orderId} выполнена`);
+// Подписываемся на события финансирования заказа
+escrowManager.on('order:funded', (order) => {
+  console.log(`Заказ полностью профинансирован: ${order.id}`);
 });
 
-// Одноразовая подписка
-escrow.once(EscrowEvents.ACT_COMPLETED, ({ actId }) => {
-  console.log(`Акт ${actId} полностью подписан`);
+// Подписываемся на завершение вех
+escrowManager.on('milestone:completed', ({ orderId, milestoneId }) => {
+  console.log(`Веха ${milestoneId} заказа ${orderId} отмечена как завершенная`);
 });
 ```
 
-## Расширенное использование
+## Документация API
 
-См. другие документы в этой папке для подробных инструкций по отдельным функциям:
+Для получения подробной информации об API см. документацию в директории `/docs`.
 
-- [Управление пользователями](./users.md)
-- [Управление заказами](./orders.md)
-- [Вехи и акты](./milestones.md)
-- [Голосование](./voting.md)
-- [Документы](./documents.md)
-- [Коммуникация](./communication.md) 
+## Примеры использования групповых заказов
+
+### Создание группового заказа
+
+```typescript
+// Создаем нескольких заказчиков
+const customer1 = await escrowManager.createUser('Customer 1', UserType.CUSTOMER);
+const customer2 = await escrowManager.createUser('Customer 2', UserType.CUSTOMER);
+const customer3 = await escrowManager.createUser('Customer 3', UserType.CUSTOMER);
+
+// Пополняем балансы
+await escrowManager.deposit(customer1.id, '600');
+await escrowManager.deposit(customer2.id, '300');
+await escrowManager.deposit(customer3.id, '100');
+
+// Создаем групповой заказ с тремя участниками
+const groupOrder = await escrowManager.createGroupOrder(
+  [customer1.id, customer2.id, customer3.id],
+  'Групповой проект',
+  'Описание группового проекта',
+  [{ description: 'Полный объем работ', amount: '1000' }]
+);
+
+// Финансируем заказ
+await escrowManager.contributeFunds(groupOrder.id, customer1.id, '600');
+await escrowManager.contributeFunds(groupOrder.id, customer2.id, '300');
+await escrowManager.contributeFunds(groupOrder.id, customer3.id, '100');
+
+// Получаем информацию о взносах
+const contributions = await escrowManager.getOrderContributions(groupOrder.id);
+console.log(contributions); // { [customer1.id]: 600, [customer2.id]: 300, [customer3.id]: 100 }
+```
+
+### Голосование за представителя
+
+```typescript
+// Голосуем за нового представителя
+const changed = await escrowManager.voteForRepresentative(
+  groupOrder.id,
+  customer1.id, // голосующий
+  customer2.id  // кандидат
+);
+
+if (changed) {
+  console.log('Представитель группы изменен');
+}
+
+// Другие участники также могут голосовать
+await escrowManager.voteForRepresentative(
+  groupOrder.id,
+  customer3.id, // голосующий
+  customer2.id  // кандидат
+);
+``` 

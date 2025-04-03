@@ -32,13 +32,15 @@ export class OrderService implements IOrderService {
    * @param title Order title
    * @param description Order description
    * @param milestones Array of milestone data
+   * @param isGroupOrder Whether this is a group order with multiple participants
    * @returns Created order
    */
   async createOrder(
     creatorId: string, 
     title: string, 
     description: string, 
-    milestones: { description: string; amount: number | string; deadline?: Date }[]
+    milestones: { description: string; amount: number | string; deadline?: Date }[],
+    isGroupOrder: boolean = false
   ): Promise<IOrder> {
     // Verify creator exists and is a customer
     const creator = await this.userService.getUser(creatorId);
@@ -52,7 +54,7 @@ export class OrderService implements IOrderService {
     }
     
     // Create order
-    const order = new Order(creatorId, title, description, milestones);
+    const order = new Order(creatorId, title, description, milestones, isGroupOrder);
     this.orders.set(order.id, order);
     
     // Add order to customer's orders
@@ -72,6 +74,23 @@ export class OrderService implements IOrderService {
       throw new Error(`Order not found: ${orderId}`);
     }
     return order;
+  }
+
+  /**
+   * Get the contributions made by participants to an order
+   * @param orderId Order ID
+   * @returns Map of user IDs to contribution amounts
+   */
+  async getOrderContributions(orderId: string): Promise<Record<string, Decimal>> {
+    const order = await this.getOrder(orderId);
+    const contributionsMap: Record<string, Decimal> = {};
+    
+    // Convert the Map to a plain object for API consistency
+    for (const [userId, amount] of order.contributors.entries()) {
+      contributionsMap[userId] = amount;
+    }
+    
+    return contributionsMap;
   }
 
   /**
@@ -100,14 +119,21 @@ export class OrderService implements IOrderService {
     
     const contributionAmount = new Decimal(contribution);
     
-    // Check user balance
-    if (user.getBalance().lessThan(contributionAmount)) {
-      throw new Error('Insufficient funds');
+    if (!contributionAmount.isZero()) {
+      // Check user balance only for non-zero contributions
+      if (user.getBalance().lessThan(contributionAmount)) {
+        throw new Error('Insufficient funds');
+      }
+      
+      // Transfer funds from user balance to escrow
+      await this.userService.withdraw(userId, contributionAmount);
+      order.addContribution(userId, contributionAmount);
+    } else {
+      // For zero contributions, just add the user to the participants
+      if (!order.participants.includes(userId)) {
+        order.participants.push(userId);
+      }
     }
-    
-    // Transfer funds from user balance to escrow
-    await this.userService.withdraw(userId, contributionAmount);
-    order.addContribution(userId, contributionAmount);
     
     // Add order to customer's orders
     (user as Customer).addOrder(order.id);

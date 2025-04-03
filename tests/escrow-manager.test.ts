@@ -83,6 +83,40 @@ describe('EscrowManager', () => {
     expect(mockFundedListener).toHaveBeenCalled();
   });
   
+  test('should create and manage group order', async () => {
+    // Create additional customer
+    const secondCustomer = await escrowManager.createUser('Second Customer', UserType.CUSTOMER);
+    await escrowManager.deposit(secondCustomer.id, '500');
+    
+    // Create group order
+    const milestones = [
+      { description: 'Group Task', amount: '1000' }
+    ];
+    
+    const groupOrder = await escrowManager.createGroupOrder(
+      [customerId, secondCustomer.id],
+      'Group Project',
+      'A collaborative project',
+      milestones
+    );
+    
+    expect(groupOrder.participants.length).toBe(2);
+    expect(groupOrder.totalCost.toString()).toBe('1000');
+    
+    // Contribute funds from both customers
+    await escrowManager.contributeFunds(groupOrder.id, customerId, '600');
+    await escrowManager.contributeFunds(groupOrder.id, secondCustomer.id, '400');
+    
+    // Check order status
+    const updatedOrder = await escrowManager.getOrder(groupOrder.id);
+    expect(updatedOrder.status).toBe(OrderStatus.FUNDED);
+    
+    // Check contribution tracking
+    const contributions = await escrowManager.getOrderContributions(groupOrder.id);
+    expect(contributions[customerId].toString()).toBe('600');
+    expect(contributions[secondCustomer.id].toString()).toBe('400');
+  });
+  
   test('should handle complete escrow workflow', async () => {
     // Create order
     const order = await escrowManager.createOrder(

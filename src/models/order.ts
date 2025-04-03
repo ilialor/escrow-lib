@@ -23,19 +23,23 @@ export class Order implements IOrder {
   documents: Map<DocumentType, IDocument>;
   dateCreated: Date;
   dateUpdated: Date;
+  isGroupOrder: boolean;
+  participants: string[];
 
   constructor(
     creatorId: string,
     title: string,
     description: string,
     milestones: { description: string; amount: number | string; deadline?: Date }[],
-    id?: string
+    isGroupOrder: boolean = false
   ) {
-    this.id = id || uuidv4();
+    this.id = uuidv4();
     this.title = title;
     this.description = description;
     this.creatorId = creatorId;
     this.representativeId = creatorId; // Initially, creator is the representative
+    this.isGroupOrder = isGroupOrder;
+    this.participants = [creatorId]; // Initially just the creator
     
     // Convert milestone data to Milestone objects
     this.milestones = milestones.map(
@@ -69,6 +73,11 @@ export class Order implements IOrder {
     // Record contribution
     const currentContribution = this.contributors.get(userId) || new Decimal(0);
     this.contributors.set(userId, currentContribution.plus(amount));
+    
+    // Add user to participants if not already present
+    if (!this.participants.includes(userId)) {
+      this.participants.push(userId);
+    }
     
     // Check if the order is now fully funded
     if (this.escrowBalance.greaterThanOrEqualTo(this.totalCost) && 

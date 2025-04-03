@@ -48,6 +48,8 @@ export interface IOrder {
   documents: Map<DocumentType, IDocument>;
   dateCreated: Date;
   dateUpdated: Date;
+  isGroupOrder: boolean;
+  participants: string[];
   
   addContribution(userId: string, amount: Decimal): void;
   markMilestoneCompleteByContractor(milestoneId: string): IAct;

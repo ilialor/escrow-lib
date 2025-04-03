@@ -23,10 +23,13 @@ export interface IOrderService {
     creatorId: string,
     title: string,
     description: string,
-    milestones: { description: string; amount: number | string; deadline?: Date }[]
+    milestones: { description: string; amount: number | string; deadline?: Date }[],
+    isGroupOrder?: boolean
   ): Promise<IOrder>;
   
   getOrder(orderId: string): Promise<IOrder>;
+  
+  getOrderContributions(orderId: string): Promise<Record<string, Decimal>>;
   
   joinOrder(
     orderId: string,

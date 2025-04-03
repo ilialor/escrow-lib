@@ -89,8 +89,13 @@ export class UserService implements IUserService {
   async withdraw(userId: string, amount: Decimal): Promise<Decimal> {
     const user = await this.getUser(userId);
     
-    if (amount.isNegative() || amount.isZero()) {
-      throw new Error('Withdrawal amount must be positive');
+    if (amount.isNegative()) {
+      throw new Error('Withdrawal amount cannot be negative');
+    }
+    
+    if (amount.isZero()) {
+      // Allow zero withdrawals in special cases (joining a group order with no initial contribution)
+      return user.getBalance();
     }
     
     user.updateBalance(amount.negated());

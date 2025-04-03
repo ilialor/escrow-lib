@@ -188,12 +188,51 @@ export class EscrowManager {
   }
   
   /**
+   * Create a new group order with multiple participants
+   * @param participantIds IDs of the initial participants
+   * @param title Order title
+   * @param description Order description
+   * @param milestones Array of milestone data
+   * @returns Created group order
+   */
+  async createGroupOrder(
+    participantIds: string[],
+    title: string,
+    description: string,
+    milestones: { description: string; amount: number | string; deadline?: Date }[]
+  ): Promise<IOrder> {
+    if (participantIds.length < 2) {
+      throw new Error("Group order requires at least two participants");
+    }
+    
+    // Create order with first participant as creator
+    const order = await this.orderService.createOrder(participantIds[0], title, description, milestones, true);
+    
+    // Add other participants to the order
+    for (let i = 1; i < participantIds.length; i++) {
+      await this.orderService.joinOrder(order.id, participantIds[i], "0");
+    }
+    
+    this.emit(EscrowEvents.ORDER_CREATED, order);
+    return order;
+  }
+  
+  /**
    * Get an order by ID
    * @param orderId Order ID
    * @returns Order instance
    */
   async getOrder(orderId: string): Promise<IOrder> {
     return this.orderService.getOrder(orderId);
+  }
+  
+  /**
+   * Get the contributions made by participants to an order
+   * @param orderId Order ID
+   * @returns Map of user IDs to contribution amounts
+   */
+  async getOrderContributions(orderId: string): Promise<Record<string, Decimal>> {
+    return this.orderService.getOrderContributions(orderId);
   }
   
   /**
