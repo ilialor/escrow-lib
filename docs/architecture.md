@@ -4,63 +4,90 @@ This library utilizes a modular architecture with the Facade pattern.
 
 **Core Components:**
 
-*   **`src/escrow-manager.ts` (Facade):** The main entry point for interacting with the library. It coordinates actions across different services.
-*   **`src/services/` (Service Layer):** Contains the core business logic, separated by domain:
-    *   `UserService`: Manages user creation, retrieval, and balance operations.
-    *   `OrderService`: Handles order creation, assignment, funding, representative voting etc.
-    *   `DocumentService`: Manages document lifecycle (creation, approval, submission).
-    *   `AIService` (Optional): Integrates with AI for document generation/validation.
-*   **`src/interfaces/` (Interfaces):** Defines the data structures (contracts) used throughout the library. Key interfaces (`IUser`, `IOrder`, `IDocument`) are defined in `base.ts`. `IOrder` now includes `customerIds`, `isGroupOrder`, `representativeId`, and `votes` fields to support group orders.
-*   **`src/utils/` (Utilities):** Shared constants and helper functions.
-*   **`src/index.ts` (Entry Point):** Exports the public API of the library.
+*   **`src/escrow-manager.ts` (Facade):** The main entry point. Coordinates actions. Configures and initializes the `AIService` with the chosen provider type and API key.
+*   **`src/services/` (Service Layer):** Contains core business logic:
+    *   `UserService`: Manages users.
+    *   `OrderService`: Manages orders, including group order logic and representative voting.
+    *   `DocumentService`: Manages document lifecycle.
+    *   `AIService`: Acts as a context for the AI Strategy pattern. It holds an instance of a configured `IAiProvider` and delegates AI-related calls (like `generateDoR`) to it. It is configured by the `EscrowManager`.
+*   **`src/services/ai/` (AI Providers):** Concrete implementations of the `IAiProvider` interface.
+    *   `google-gemini.provider.ts`: Interacts with the actual Google Gemini API. Requires `@google/generative-ai` package and a valid API key. Handles prompt formatting for Gemini.
+    *   `mock-ai.provider.ts`: Provides simulated AI responses for testing or use without an API key. Contains the previous simulation logic, slightly adapted for group orders.
+    *   *(Other providers like `openai.provider.ts` could be added here in the future).*
+*   **`src/interfaces/` (Interfaces):** Defines data structures.
+    *   `base.ts`: Core interfaces (`IUser`, `IOrder`, `IDocument`). `IOrder` supports group orders.
+    *   `ai-provider.interface.ts`: Defines the `IAiProvider` interface that all AI providers must implement.
+*   **`src/utils/` (Utilities):** Shared constants and helpers.
+*   **`src/index.ts` (Entry Point):** Exports the public API.
 
 **Data Flow:**
 
-Client Code -> `EscrowManager` -> Specific Service(s) -> (Data Layer - currently in-memory)
+Client Code -> `EscrowManager` -> Specific Service (e.g., `DocumentService`, `AIService`)
+`AIService` -> Configured `IAiProvider` (e.g., `GoogleGeminiProvider`) -> External AI API / Mock Logic
+-> (Data Layer - currently in-memory)
 
-`EscrowManager` emits events for key state changes.
+`EscrowManager` emits events.
+
+**Configuration:**
+
+AI functionality is configured when creating the `EscrowManager` instance by providing an AI provider type string (e.g., `'gemini'`, `'mock'`) and the corresponding API key (if required by the provider).
+
+```typescript
+// Use Google Gemini
+const managerWithGemini = new EscrowManager({ providerType: 'gemini', apiKey: 'YOUR_GEMINI_API_KEY' });
+
+// Use Mock AI (no key needed)
+const managerWithMock = new EscrowManager({ providerType: 'mock' });
+```
 
 **File Structure:**
 
-*   `/src`: Contains all TypeScript source code.
-    *   `/interfaces`: TypeScript interfaces.
-    *   `/services`: Business logic services.
-    *   `/utils`: Shared constants and utilities.
-    *   `escrow-manager.ts`: Facade class.
-    *   `index.ts`: Main export file.
-*   `/dist`: Compiled JavaScript output.
-*   `/docs`: Developer documentation.
-*   `/tests`: Unit and integration tests.
-*   `package.json`: Project metadata and dependencies.
-*   `tsconfig.json`: TypeScript compiler configuration.
+*   `/src`: Source code.
+    *   `/interfaces`: Interfaces (`base.ts`, `ai-provider.interface.ts`, etc.).
+    *   `/services`: Business logic services (`user.service.ts`, `order.service.ts`, `document.service.ts`, `ai.service.ts`).
+        *   `/ai`: Concrete AI provider implementations (`google-gemini.provider.ts`, `mock-ai.provider.ts`).
+    *   `/utils`: Utilities (`constants.ts`).
+    *   `escrow-manager.ts`: Facade.
+    *   `index.ts`: Entry point.
+*   `/dist`: Compiled JS output.
+*   `/docs`: Documentation.
+*   `/tests`: Tests.
+*   `package.json`: Dependencies (will include `@google/generative-ai`).
+*   `tsconfig.json`: TypeScript config.
 
 escrow-lib/
-├── .git/                 # Git репозиторий
-├── .gitignore            # Файлы, игнорируемые Git
-├── dist/                 # Скомпилированный JavaScript код (результат сборки TypeScript)
-├── docs/                 # Директория с документацией проекта
-│   ├── README.md         # Документация для разработчиков
-│   └── document-management.md # Специфичная документация по управлению документами
-├── node_modules/         # Зависимости проекта
-├── src/                  # Исходный код библиотеки на TypeScript
-│   ├── interfaces/       # Определения интерфейсов TypeScript
-│   │   ├── base.ts       # Основные интерфейсы (IUser, IOrder, IDocument и т.д.)
-│   │   ├── services.ts   # Интерфейсы для сервисов (возможно, избыточны)
-│   │   └── index.ts      # Точка экспорта для всех интерфейсов, включая алиасы
-│   ├── services/         # Сервисы, инкапсулирующие бизнес-логику
-│   │   ├── ai-service.ts   # Логика взаимодействия с AI (Gemini)
-│   │   ├── document-service.ts # Логика управления документами
-│   │   ├── order-service.ts    # Логика управления заказами
-│   │   └── user-service.ts     # Логика управления пользователями
-│   ├── utils/            # Вспомогательные утилиты и константы
-│   │   └── constants.ts  # Определения Enum (UserType, OrderStatus и т.д.)
-│   ├── escrow-manager.ts # Основной класс-фасад библиотеки
-│   └── index.ts          # Главная точка входа в библиотеку (экспорты)
-├── tests/                # Директория для тестов
-│   └── ... (файлы тестов)
-├── jest.config.js        # Конфигурация для тестового фреймворка Jest
-├── package-lock.json     # Зафиксированные версии зависимостей
-├── package.json          # Метаданные проекта и зависимости
-├── README.md             # Основное описание проекта для пользователей
-├── tsconfig.json         # Конфигурация компилятора TypeScript
-└── tsconfig.test.json    # Конфигурация TypeScript для тестов
+├── .git/
+├── .gitignore
+├── dist/
+├── docs/
+│   ├── README.md
+│   ├── architecture.md # <-- YOU ARE HERE
+│   ├── document-management.md
+│   ├── events.md
+│   └── group-orders.md
+├── node_modules/
+├── src/
+│   ├── interfaces/
+│   │   ├── ai-provider.interface.ts # New
+│   │   ├── base.ts
+│   │   └── index.ts
+│   ├── services/
+│   │   ├── ai/                  # New Directory
+│   │   │   ├── google-gemini.provider.ts # New
+│   │   │   └── mock-ai.provider.ts      # New (moved from ai.service)
+│   │   ├── ai.service.ts          # Refactored
+│   │   ├── document-service.ts
+│   │   ├── order-service.ts
+│   │   └── user-service.ts
+│   ├── utils/
+│   │   └── constants.ts
+│   ├── escrow-manager.ts      # Updated (constructor)
+│   └── index.ts
+├── tests/
+│   └── ...
+├── jest.config.js
+├── package-lock.json
+├── package.json             # Updated (dependencies)
+├── README.md                # Updated (AI config)
+├── tsconfig.json
+└── tsconfig.test.json

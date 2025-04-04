@@ -65,10 +65,18 @@ import {
     IOrder,
     // ... import other necessary types/enums
 } from './src'; // Adjust path based on your setup
+import { AiServiceConfig } from './src/services/ai.service'; // Import config type
 
 async function main() {
-    // Initialize with a (mock) AI API Key to enable AI features
-    const escrowManager = new EscrowManager('your-mock-or-real-api-key');
+    // Configure AI Provider
+    const aiConfig: AiServiceConfig = {
+        providerType: 'gemini', // or 'mock'
+        apiKey: 'YOUR_MOCK_OR_REAL_API_KEY' // Optional for mock provider
+    };
+    // const aiConfig: AiServiceConfig = { providerType: 'mock' }; // Example for mock
+
+    // Initialize with AI config
+    const escrowManager = new EscrowManager(aiConfig);
 
     // --- Setup Event Listeners (See "Events" section below for examples) ---
     escrowManager.on(EscrowEvents.ORDER_CREATED, (order: IOrder) => {

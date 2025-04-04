@@ -138,6 +138,28 @@ export class DocumentService {
         const doc = this.documents.get(documentId);
         if (!doc) return null;
 
+        // --- MODIFIED Check: Permission to Approve ---
+        const order = await this.orderService.getOrder(doc.orderId);
+        if (!order) {
+             throw new Error(`Order ${doc.orderId} not found when approving document ${documentId}.`);
+        }
+
+        let isAllowedToApprove = true; // Default to true for standard orders or non-approval workflows
+        if (order.isGroupOrder) {
+            // Group Order: Require the approver to be the representative
+            if (!order.representativeId || userId !== order.representativeId) {
+                 isAllowedToApprove = false;
+                 console.warn(`[DocumentService] User ${userId} is not the representative (${order.representativeId}) for group order ${order.id} and cannot approve document ${documentId}.`);
+                 // Decide: throw error or just return null/unedited doc? Let's throw for clarity.
+                 throw new Error(`User ${userId} is not the representative and cannot approve document ${documentId} for group order ${order.id}.`);
+            }
+        } else {
+            // Standard Order: Any customer can approve (or anyone if logic allows? Current check is just existence)
+            // Keep the original permissive logic for standard orders for now.
+            // If stricter checks needed (e.g., only customerIds[0]), add them here.
+        }
+        // --- END MODIFIED Check ---
+
         if (doc.type === DocumentType.ACT_OF_WORK) {
             console.warn(`[DocumentService] Cannot 'approve' an Act document (${documentId}). Use 'signAct' instead.`);
             return this.copyDocument(doc);

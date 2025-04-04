@@ -26,33 +26,47 @@ import { UserService } from './services/user.service';
 // Import EscrowEvents specifically from constants
 import { EscrowEvents } from './utils/constants';
 
+// Define AI configuration type
+import { AiServiceConfig } from './services/ai.service'; // Import the config type
+
 export class EscrowManager extends EventEmitter {
     private userService: UserService;
     private orderService: OrderService;
     private documentService: DocumentService;
     private aiService: AIService;
 
-    // Services are instantiated here. Consider Dependency Injection for larger apps.
-    constructor(aiApiKey?: string) {
+    // Services are instantiated here.
+    // Constructor now accepts AiServiceConfig object
+    constructor(aiConfig?: AiServiceConfig) {
         super();
         this.setMaxListeners(20);
 
         this.userService = new UserService();
         // Corrected Initialization Order for Circular Dependency:
-        // 1. Instantiate services (DocumentService needs OrderService ref later)
-        this.orderService = new OrderService(); // Instantiate without docService first
-        this.documentService = new DocumentService(this.orderService); // Pass orderService ref
-        // 2. Inject the missing dependency back into OrderService
-        this.orderService.setDocumentService(this.documentService); // Add a setter method
+        this.orderService = new OrderService();
+        this.documentService = new DocumentService(this.orderService);
+        this.orderService.setDocumentService(this.documentService);
 
-        this.aiService = new AIService(aiApiKey);
+        // Initialize AIService with provided config or default to mock
+        const resolvedAiConfig = aiConfig ?? { providerType: 'mock' }; // Default to mock if no config
+        this.aiService = new AIService(resolvedAiConfig);
 
         console.log("EscrowManager initialized.");
+        if (!this.isAiEnabled()) {
+             console.warn("EscrowManager: AI features might be disabled based on AIService configuration.");
+        }
     }
 
-    // --- AI Configuration ---
-    setAiApiKey(apiKey: string): void {
-        this.aiService.setApiKey(apiKey);
+    // --- AI Configuration (Keep isAiEnabled, remove setAiApiKey) ---
+    // setAiApiKey(apiKey: string): void {
+    //     // Deprecated: Use updateAiConfig
+    //     this.aiService.updateConfig({ apiKey });
+    // }
+
+    updateAiConfig(newConfig: Partial<AiServiceConfig>): void {
+         console.log("[EscrowManager] Updating AI Service configuration...");
+         this.aiService.updateConfig(newConfig);
+         console.log(`[EscrowManager] AI Service reconfigured. AI Enabled: ${this.isAiEnabled()}`);
     }
 
     isAiEnabled(): boolean {
