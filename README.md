@@ -144,18 +144,28 @@ async function main() {
 }
 
 main();
+```
 
 ### Development Setup
+
 To set up the library for local development or contribution:
+
 #### Clone the repository:
+```
 git clone https://github.com/your-username/escrow-lib.git
 cd escrow-lib
-
+```
 #### Install dependencies:
+
+```
 npm install
+```
 
 #### Build the library: (Compiles TypeScript to JavaScript in /dist)
+
+```
 npm run build
+```
 
 #### Running Tests
 (Note: Tests need to be implemented for comprehensive coverage).
@@ -169,8 +179,9 @@ A demo script (main.ts) is included to showcase the library's functionality. To 
 Make sure you have installed dependencies (npm install).
 
 Execute using ts-node:
+```
 npx ts-node main.ts
-
+```
 (This command compiles and runs the main.ts script directly, using the library's TypeScript source from ./src)
 
 ## Events
