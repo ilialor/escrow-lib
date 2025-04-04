@@ -12,15 +12,25 @@ This library utilizes a Facade pattern (`EscrowManager`) providing a simple entr
 
 *   **User Management:** Create and manage different user types (Customer, Contractor, Platform).
 *   **Order & Milestone Management:** Create orders, define milestones with deadlines and budgets, track progress, and manage statuses.
-*   **Document Workflow:** Manage project documents like Specifications, Deliverables, and Acts of Work.
+*   **Document Workflow:** Manage project documents like Specifications, Deliverables, and Acts of Work. (See [Document Management](./docs/document-management.md))
 *   **AI Integration (Simulated):**
     *   Automatically generate Definition of Ready (DoR), Roadmap, and Definition of Done (DoD) documents.
     *   Validate submitted Deliverables against DoD criteria.
     *   *(Note: Requires an API key, but the current implementation simulates AI responses).*
 *   **Act of Work Management:** Generate, sign (multi-party), reject, and automatically sign Acts of Work to approve milestone completion and trigger payments.
-*   **Event-Driven:** Subscribe to events for key state changes (order creation, funding, document generation, act completion, etc.).
+*   **Event-Driven:** Subscribe to events for key state changes (order creation, funding, document generation, act completion, etc.). (See [Events](./docs/events.md))
+*   **Group Orders:** Support for orders involving multiple parties. (See [Group Orders](./docs/group-orders.md))
+*   **Order Comments:** Allow participants to add and view comments on orders. (See [Communication Features](./docs/communication.md))
 *   **In-Memory Storage:** Uses in-memory storage for demonstration purposes (easily replaceable with a database layer).
-*   **(Planned/Basic Support):** Group Orders, Communication module (placeholders, need further implementation).
+*   **(Planned/Basic Support):** Dispute Resolution (placeholder), further enhancements to Group Orders & Communication.
+*   **Order Management:** Create, update, and manage escrow orders with milestones.
+*   **Funds Management:** Deposit, release, and refund funds securely.
+*   **Dispute Resolution:** Handle disputes with an optional arbitration process.
+*   **Document Management:** Attach and manage relevant documents for orders. (See [Document Management](./docs/document-management.md))
+*   **Group Orders:** Support for orders involving multiple parties. (See [Group Orders](./docs/group-orders.md))
+*   **Order Comments:** Allow participants to add and view comments on orders. (See [Communication Features](./docs/communication.md))
+*   **Event Notifications:** Emits events for key actions (order creation, status changes, etc.). (See [Events](./docs/events.md))
+*   **Flexible Configuration:** Adaptable to various escrow workflows.
 
 ## Installation & Usage (Local / GitHub)
 
@@ -231,8 +241,14 @@ manager.on(EscrowEvents.MILESTONE_PAID, (data: { orderId: string; milestoneId: s
 
 
 ### Architecture
-The library follows a modular architecture using the Facade pattern (EscrowManager) coordinating actions across various services (UserService, OrderService, DocumentService, AIService) located in src/services/. Interfaces defining data structures are in src/interfaces/. Shared utilities and constants are in src/utils/.
-See docs/architecture.md for more details.
+The library follows a modular architecture using the Facade pattern (EscrowManager) coordinating actions across various services (UserService, OrderService, DocumentService, AIService, CommentService) located in `src/services/` and `src/communication/`. Interfaces defining data structures are in `src/interfaces/`. Shared utilities and constants are in `src/utils/`.
+
+See the following documentation for more details:
+*   [Architecture Overview](./docs/architecture.md)
+*   [Events](./docs/events.md)
+*   [Document Management](./docs/document-management.md)
+*   [Group Orders](./docs/group-orders.md)
+*   [Communication Features](./docs/communication.md)
 
 ## Contributing
 Contributions are welcome! Please follow standard fork/pull request workflows. Ensure code adheres to the existing style and that any new features include appropriate documentation and tests (when implemented).
