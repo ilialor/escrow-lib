@@ -1,7 +1,8 @@
 import { OrderService, IMilestoneInputData } from '../src/services/order.service';
 import { IOrder, IUser, OrderStatus, UserType } from '../src/interfaces';
 import { DocumentService } from '../src/services/document.service';
-import { jest, describe, it, expect, beforeEach } from '@jest/globals';
+import { jest, describe, it, expect, beforeEach, beforeAll, afterAll } from '@jest/globals';
+import { v4 as uuidv4 } from 'uuid';
 // Mock DocumentService if needed, or provide a minimal mock
 jest.mock('../src/services/document.service');
 
@@ -12,6 +13,25 @@ describe('OrderService', () => {
     let customerB: IUser;
     let customerC: IUser;
     let milestones: IMilestoneInputData[];
+
+    // Store original console methods
+    const originalConsoleLog = console.log;
+    const originalConsoleWarn = console.warn;
+    const originalConsoleError = console.error;
+
+    // Suppress console output during tests
+    beforeAll(() => {
+        console.log = jest.fn();
+        console.warn = jest.fn();
+        console.error = jest.fn();
+    });
+
+    // Restore console output after all tests
+    afterAll(() => {
+        console.log = originalConsoleLog;
+        console.warn = originalConsoleWarn;
+        console.error = originalConsoleError;
+    });
 
     beforeEach(() => {
         // Re-initialize service for each test

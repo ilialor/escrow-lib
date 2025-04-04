@@ -1,6 +1,6 @@
 import { Decimal } from 'decimal.js';
 // Import Jest functions
-import { describe, test, expect, beforeEach, jest } from '@jest/globals';
+import { describe, test, expect, beforeEach, jest, beforeAll, afterAll } from '@jest/globals';
 // Import EscrowManager and Enums directly
 import { EscrowManager } from '../src/escrow-manager';
 import { UserType, OrderStatus, DocumentType, EscrowEvents } from '../src'; // Import from index
@@ -27,6 +27,25 @@ describe('EscrowManager (Standard Flow)', () => {
   let fundOrderSpy: jest.SpiedFunction<typeof OrderService.prototype.fundOrder>;
   let approveDocumentSpy: jest.SpiedFunction<typeof DocumentService.prototype.approveDocument>;
   let getDocumentSpy: jest.SpiedFunction<typeof DocumentService.prototype.getDocument>; // Add spy for getDocument
+
+  // Store original console methods
+  const originalConsoleLog = console.log;
+  const originalConsoleWarn = console.warn;
+  const originalConsoleError = console.error;
+
+  // Suppress console output during tests
+  beforeAll(() => {
+      console.log = jest.fn();
+      console.warn = jest.fn();
+      console.error = jest.fn();
+  });
+
+  // Restore console output after all tests
+  afterAll(() => {
+      console.log = originalConsoleLog;
+      console.warn = originalConsoleWarn;
+      console.error = originalConsoleError;
+  });
 
   beforeEach(async () => { // Make beforeEach async
     // Reset mocks before each test

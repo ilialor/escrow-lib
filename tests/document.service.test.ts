@@ -2,11 +2,30 @@ import { DocumentService } from '../src/services/document.service';
 import { OrderService } from '../src/services/order.service';
 import { IOrder, IUser, DocumentType, ActStatus, IAct, IDocument, UserType, MilestoneStatus, OrderStatus } from '../src/interfaces';
 import { v4 as uuidv4 } from 'uuid';
-import { jest, describe, it, expect, beforeEach } from '@jest/globals';
+import { jest, describe, it, expect, beforeEach, beforeAll, afterAll } from '@jest/globals';
 // Mock OrderService
 jest.mock('../src/services/order.service');
 
 describe('DocumentService', () => {
+    // Store original console methods
+    const originalConsoleLog = console.log;
+    const originalConsoleWarn = console.warn;
+    const originalConsoleError = console.error;
+
+    // Suppress console output during tests
+    beforeAll(() => {
+        console.log = jest.fn();
+        console.warn = jest.fn();
+        console.error = jest.fn();
+    });
+
+    // Restore console output after all tests
+    afterAll(() => {
+        console.log = originalConsoleLog;
+        console.warn = originalConsoleWarn;
+        console.error = originalConsoleError;
+    });
+
     let documentService: DocumentService;
     let mockOrderService: jest.Mocked<OrderService>;
     let mockStandardOrder: IOrder;
@@ -90,8 +109,12 @@ describe('DocumentService', () => {
          });
 
          it('should PREVENT a non-representative customer from approving a document for a group order', async () => {
+              // Restore console.warn temporarily for this test as the service logs before throwing
+              console.warn = originalConsoleWarn;
               await expect(documentService.approveDocument(genericDoc.id, customerB.id))
                   .rejects.toThrow(`User ${customerB.id} is not the representative and cannot approve document ${genericDoc.id} for group order ${mockGroupOrder.id}.`);
+              // Restore global mock
+              console.warn = jest.fn();
          });
 
          it('should allow any customer (in this simple setup) to approve for standard order', async () => {

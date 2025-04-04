@@ -1,7 +1,7 @@
 import { EscrowManager } from '../src/escrow-manager';
 import { AiServiceConfig } from '../src/services/ai.service';
 import { EscrowEvents, UserType, OrderStatus, IOrder, IUser } from '../src'; // Assuming index exports necessary types
-import { jest, describe, it, expect, beforeEach } from '@jest/globals';
+import { jest, describe, it, expect, beforeEach, beforeAll, afterAll } from '@jest/globals';
 // Mock services heavily to isolate EscrowManager logic
 jest.mock('../src/services/user.service');
 jest.mock('../src/services/order.service');
@@ -20,7 +20,6 @@ const MockOrderService = OrderService as jest.MockedClass<typeof OrderService>;
 const MockDocumentService = DocumentService as jest.MockedClass<typeof DocumentService>;
 const MockAIService = AIService as jest.MockedClass<typeof AIService>;
 
-
 describe('EscrowManager - Group Orders & AI Config', () => {
     let escrowManager: EscrowManager;
     // We don't need separate mock instances here if EscrowManager creates its own
@@ -29,6 +28,28 @@ describe('EscrowManager - Group Orders & AI Config', () => {
     let userB: IUser;
     let userC: IUser;
     let contractorUser: IUser;
+
+    let approveDocumentSpy: jest.SpiedFunction<typeof DocumentService.prototype.approveDocument>;
+    let updateAiConfigSpy: jest.SpiedFunction<typeof AIService.prototype.updateConfig>;
+
+    // Store original console methods
+    const originalConsoleLog = console.log;
+    const originalConsoleWarn = console.warn;
+    const originalConsoleError = console.error;
+
+    // Suppress console output during tests
+    beforeAll(() => {
+        console.log = jest.fn();
+        console.warn = jest.fn();
+        console.error = jest.fn();
+    });
+
+    // Restore console output after all tests
+    afterAll(() => {
+        console.log = originalConsoleLog;
+        console.warn = originalConsoleWarn;
+        console.error = originalConsoleError;
+    });
 
     beforeEach(() => { // Make beforeEach synchronous again if no async setup needed
         // Reset mocks

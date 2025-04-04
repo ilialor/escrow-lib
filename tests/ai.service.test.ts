@@ -1,7 +1,7 @@
 import { AIService, AiServiceConfig } from '../src/services/ai.service';
 import { MockAiProvider } from '../src/services/ai/mock-ai.provider';
 import { GoogleGeminiProvider } from '../src/services/ai/google-gemini.provider';
-import { jest, describe, it, expect, beforeEach } from '@jest/globals';
+import { jest, describe, it, expect, beforeEach, beforeAll, afterAll } from '@jest/globals';
 // Import necessary types
 import { IOrder, IDoRDocument, IValidationResult, IDeliverableDocument, IDoDDocument, DocumentType } from '../src/interfaces';
 
@@ -18,6 +18,24 @@ const getInternalProvider = (aiService: AIService): any => {
 }
 
 describe('AIService', () => {
+    // Store original console methods
+    const originalConsoleLog = console.log;
+    const originalConsoleWarn = console.warn;
+    const originalConsoleError = console.error;
+
+    // Suppress console output during tests
+    beforeAll(() => {
+        console.log = jest.fn();
+        console.warn = jest.fn();
+        console.error = jest.fn();
+    });
+
+    // Restore console output after all tests
+    afterAll(() => {
+        console.log = originalConsoleLog;
+        console.warn = originalConsoleWarn;
+        console.error = originalConsoleError;
+    });
 
     beforeEach(() => {
         // Reset mocks and mock instances before each test
@@ -25,6 +43,9 @@ describe('AIService', () => {
         MockAiProviderMock.mock.instances.length = 0; // Clear instances
         GoogleGeminiProviderMock.mockClear();
         GoogleGeminiProviderMock.mock.instances.length = 0; // Clear instances
+        // Restore console temporarily for this specific test's spies
+        console.warn = originalConsoleWarn;
+        console.error = originalConsoleError;
     });
 
     it('should initialize with MockAiProvider by default', () => {
@@ -82,6 +103,8 @@ describe('AIService', () => {
          GoogleGeminiProviderMock.mockImplementationOnce(() => {
              throw new Error('Initialization failed');
          });
+         // Temporarily restore console.error to allow spyOn to work
+         console.error = originalConsoleError;
          const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
          const config: AiServiceConfig = { providerType: 'gemini', apiKey: 'test-key' };
 
@@ -95,6 +118,8 @@ describe('AIService', () => {
          expect(getInternalProvider(aiService)).toBeInstanceOf(MockAiProvider);
 
          consoleErrorSpy.mockRestore();
+         // Restore global mock
+         console.error = jest.fn();
      });
 
 
