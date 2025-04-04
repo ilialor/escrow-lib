@@ -10,6 +10,7 @@ import {
     IOrder,
     IRoadmapDocument,
     ISpecificationDocument,
+    IMilestone,
     // Interfaces
     IUser,
     IValidationResult,
@@ -90,6 +91,38 @@ export class EscrowManager extends EventEmitter {
         return order;
     }
 
+    // --- NEW: Method for creating group orders ---
+    async createGroupOrder(
+        customerIds: string[],
+        title: string,
+        description: string,
+        milestoneData: IMilestoneInputData[],
+        initialRepresentativeId?: string // Optional, defaults to first customer in service
+    ): Promise<IOrder> {
+        if (!customerIds || customerIds.length < 2) {
+            throw new Error('Group orders require at least two customer IDs.');
+        }
+        // Validate all customer IDs exist and are of type CUSTOMER
+        for (const custId of customerIds) {
+            const customer = await this.userService.getUser(custId);
+            if (!customer || customer.type !== UserType.CUSTOMER) {
+                throw new Error(`Invalid customer ID ${custId} or user is not a Customer.`);
+            }
+        }
+        // Validate initialRepresentativeId if provided
+        if (initialRepresentativeId) {
+            const rep = await this.userService.getUser(initialRepresentativeId);
+            if (!rep || !customerIds.includes(rep.id)) {
+                 throw new Error(`Provided initial representative ID ${initialRepresentativeId} is not valid or not in the customer list.`);
+            }
+        }
+
+        const order = await this.orderService.createGroupOrder(customerIds, title, description, milestoneData, initialRepresentativeId);
+        this.emit(EscrowEvents.GROUP_ORDER_CREATED, order);
+        return order;
+    }
+    // --- END NEW METHOD ---
+
      async getOrder(id: string): Promise<IOrder | null> {
         return this.orderService.getOrder(id);
     }
@@ -104,38 +137,62 @@ export class EscrowManager extends EventEmitter {
               throw new Error(`Assigner user with ID ${assignerUserId} not found.`);
           }
 
-         const order = await this.orderService.assignContractor(orderId, contractorId, assigner);
+         const order = await this.orderService.assignContractor(orderId, contractorId, assigner); // Pass the user object
+         const oldStatus = order.status; // Get status *before* potential change
+
+         // Emit assign event regardless of status change
          this.emit(EscrowEvents.ORDER_CONTRACTOR_ASSIGNED, { orderId, contractorId });
-          if (order.status === OrderStatus.IN_PROGRESS && order.contractorId === contractorId) { // Check if status actually changed
-             this.emit(EscrowEvents.ORDER_STATUS_CHANGED, { orderId, oldStatus: OrderStatus.FUNDED, newStatus: OrderStatus.IN_PROGRESS }); // Assume it came from FUNDED
+
+         // Fetch the latest order state to check if status *actually* changed
+         const updatedOrder = await this.orderService.getOrder(orderId);
+         if (updatedOrder && updatedOrder.status !== oldStatus && updatedOrder.status === OrderStatus.IN_PROGRESS) {
+             this.emit(EscrowEvents.ORDER_STATUS_CHANGED, { orderId, oldStatus, newStatus: updatedOrder.status });
          }
-         return order;
+         // Return the latest state
+         return updatedOrder || order; // Fallback to previous state if somehow null
      }
 
-     async fundOrder(orderId: string, fundingUserId: string, amount: number): Promise<IOrder> {
-          const user = await this.userService.getUser(fundingUserId);
-          if (!user) throw new Error(`Funding user ${fundingUserId} not found.`);
-          // Basic check: only customer or platform can fund? Or anyone? Assume customer/platform.
-          if (user.type !== UserType.CUSTOMER && user.type !== UserType.PLATFORM) {
-              throw new Error(`User ${fundingUserId} type (${user.type}) cannot fund orders.`);
+     // Rename fundOrder to contributeFunds for clarity, especially with group orders
+     async contributeFunds(orderId: string, contributingUserId: string, amount: number): Promise<IOrder> {
+          const user = await this.userService.getUser(contributingUserId);
+          if (!user) throw new Error(`Contributing user ${contributingUserId} not found.`);
+
+          // Check if user is allowed to contribute (must be one of the customers)
+          const orderCheck = await this.orderService.getOrder(orderId);
+          if (!orderCheck) throw new Error(`Order ${orderId} not found.`);
+          if (!orderCheck.customerIds.includes(contributingUserId)) {
+              throw new Error(`User ${contributingUserId} is not a customer for order ${orderId} and cannot contribute funds.`);
+          }
+
+          // Check user balance BEFORE attempting to fund
+          if (user.balance < amount) {
+              throw new Error(`User ${contributingUserId} has insufficient balance (${user.balance}) to contribute ${amount}.`);
           }
 
           // Simulate withdrawing from user and adding to order escrow
-          // In real app: integrate with payment/balance system
-          await this.userService.withdraw(fundingUserId, amount); // Throws if insufficient balance
+          await this.userService.withdraw(contributingUserId, amount);
           try {
-              const { order, newFundedAmount } = await this.orderService.fundOrder(orderId, amount);
-              this.emit(EscrowEvents.ORDER_FUNDED, { orderId, amount, newFundedAmount });
-              // Check if status changed due to funding
-              if ((order.status === OrderStatus.FUNDED || order.status === OrderStatus.IN_PROGRESS) && newFundedAmount >= order.totalAmount) {
-                  const oldStatus = order.contractorId ? OrderStatus.CREATED : OrderStatus.CREATED; // Infer old status (bit tricky)
+              // OrderService.fundOrder now takes contributingCustomerId
+              const { order, newFundedAmount } = await this.orderService.fundOrder(orderId, contributingUserId, amount);
+              const oldStatus = orderCheck.status; // Status before this contribution
+
+              // Emit contribution event
+              this.emit(EscrowEvents.ORDER_FUNDS_CONTRIBUTED, { orderId, customerId: contributingUserId, amount, newFundedAmount });
+
+              // Check if status changed due to this funding reaching the threshold
+              if (order.status !== oldStatus && (order.status === OrderStatus.FUNDED || order.status === OrderStatus.IN_PROGRESS)) {
                   this.emit(EscrowEvents.ORDER_STATUS_CHANGED, { orderId, oldStatus, newStatus: order.status });
+                   // Emit ORDER_FUNDED specifically when it becomes fully funded
+                   if (newFundedAmount >= order.totalAmount) {
+                        this.emit(EscrowEvents.ORDER_FUNDED, order); // Emit the fully funded order object
+                   }
               }
               return order;
           } catch(error) {
-              // If order funding fails, attempt to refund the user
-              await this.userService.deposit(fundingUserId, amount);
-              throw error; // Re-throw the original error
+              // If order funding fails in OrderService, attempt to refund the user
+              await this.userService.deposit(contributingUserId, amount);
+              console.error(`[EscrowManager] Refunding user ${contributingUserId} amount ${amount} due to funding error.`);
+              throw error; // Re-throw the original error from OrderService
           }
       }
 
@@ -278,28 +335,38 @@ export class EscrowManager extends EventEmitter {
         // --- NEW: Update Milestone Status ---
         // Find the milestone linked to this phase (this linking isn't explicitly done yet,
         // so we'll find the milestone matching the phase's index as a simple heuristic)
+        // --- MODIFIED Recovery Logic ---
         try {
+            let milestoneToUpdate: IMilestone | undefined;
             const roadmap = (await this.findDocumentsByOrder(orderId, DocumentType.ROADMAP) as IRoadmapDocument[])
                               .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
             if (roadmap) {
                 const phaseIndex = roadmap.content.phases.findIndex(p => p.id === phaseId);
                 if (phaseIndex !== -1 && order.milestones[phaseIndex]) {
-                    const milestoneToUpdate = order.milestones[phaseIndex];
-                    if (milestoneToUpdate.status === MilestoneStatus.PENDING || milestoneToUpdate.status === MilestoneStatus.IN_PROGRESS) {
-                         // Change status to AWAITING_ACCEPTANCE upon first deliverable submission for the phase? Or IN_PROGRESS?
-                         // Let's go with IN_PROGRESS if it was PENDING.
-                         const targetStatus = MilestoneStatus.IN_PROGRESS; // Or AWAITING_ACCEPTANCE? Let's try IN_PROGRESS first.
-                         if (milestoneToUpdate.status !== targetStatus) {
-                            const oldStatus = milestoneToUpdate.status;
-                            await this.orderService.updateMilestoneStatus(orderId, milestoneToUpdate.id, targetStatus);
-                            this.emit(EscrowEvents.MILESTONE_STATUS_CHANGED, { orderId, milestoneId: milestoneToUpdate.id, oldStatus: oldStatus, newStatus: targetStatus });
-                         }
-                    }
+                    milestoneToUpdate = order.milestones[phaseIndex];
                 } else {
-                     console.warn(`[EscrowManager] Could not find matching milestone for phase index ${phaseIndex} derived from phase ${phaseId}`);
+                     console.warn(`[EscrowManager] Could not find matching milestone for phase index ${phaseIndex} derived from phase ${phaseId} in Roadmap.`);
                 }
+            }
+
+            // If roadmap lookup failed, try finding milestone directly by phaseId (assuming phaseId might be milestoneId)
+            if (!milestoneToUpdate) {
+                 console.warn(`[EscrowManager] Roadmap lookup failed for phase ${phaseId}. Attempting to find milestone directly by ID.`);
+                 milestoneToUpdate = order.milestones.find(m => m.id === phaseId);
+            }
+            // --- END MODIFIED Recovery Logic ---
+
+            if (milestoneToUpdate) {
+                 if (milestoneToUpdate.status === MilestoneStatus.PENDING || milestoneToUpdate.status === MilestoneStatus.IN_PROGRESS) {
+                     const targetStatus = MilestoneStatus.IN_PROGRESS; // Or AWAITING_ACCEPTANCE? Let's stick with IN_PROGRESS.
+                     if (milestoneToUpdate.status !== targetStatus) {
+                        const oldStatus = milestoneToUpdate.status;
+                        await this.orderService.updateMilestoneStatus(orderId, milestoneToUpdate.id, targetStatus);
+                        this.emit(EscrowEvents.MILESTONE_STATUS_CHANGED, { orderId, milestoneId: milestoneToUpdate.id, oldStatus: oldStatus, newStatus: targetStatus });
+                     }
+                 }
             } else {
-                 console.warn(`[EscrowManager] Roadmap not found for order ${orderId} when trying to update milestone status.`);
+                console.error(`[EscrowManager] CRITICAL: Could not find a milestone corresponding to phaseId ${phaseId} for order ${orderId} either via Roadmap or direct ID lookup.`);
             }
         } catch (e: any) {
             console.error(`[EscrowManager] Error trying to update milestone status after deliverable submission: ${e.message}`);
@@ -480,15 +547,28 @@ export class EscrowManager extends EventEmitter {
                       return;
                   }
 
-                  const customerId = order.customerId;
-                   // Check if customer already signed
-                  const customerHasSigned = currentAct.signedBy.some(s => s.userId === customerId);
+                  // --- MODIFIED for Group Orders --- 
+                  // In a group order, sign as the representative if set, otherwise sign as the first customer? 
+                  // Or should auto-sign only apply to non-group orders?
+                  // For now, let's assume auto-sign applies to the representative in group orders, or the single customer in standard orders.
+                  let customerToSignId: string | undefined;
+                  if (order.isGroupOrder) {
+                      customerToSignId = order.representativeId; 
+                      if (!customerToSignId) {
+                          console.error(`[EscrowManager] Auto-sign failed for group order ${order.id}: No representative set.`);
+                          return;
+                      }
+                  } else {
+                      customerToSignId = order.customerIds[0]; // Single customer in the list
+                  }
+                   // Check if the designated customer already signed
+                  const customerHasSigned = currentAct.signedBy.some(s => s.userId === customerToSignId);
 
                   if (!customerHasSigned) {
-                      console.log(`[EscrowManager] Attempting auto-sign for Act ${actId} as Customer (${customerId}).`);
-                       await this.signActDocument(actId, customerId); // Attempt to sign as customer
+                      console.log(`[EscrowManager] Attempting auto-sign for Act ${actId} as Customer/Representative (${customerToSignId}).`);
+                       await this.signActDocument(actId, customerToSignId); // Attempt to sign as the designated customer/rep
                   } else {
-                      console.log(`[EscrowManager] Auto-sign skipped for Act ${actId}: Customer already signed.`);
+                      console.log(`[EscrowManager] Auto-sign skipped for Act ${actId}: Designated Customer/Representative already signed.`);
                   }
               } catch (error: any) {
                   console.error(`[EscrowManager] Error during auto-sign execution for Act ${actId}: ${error.message}`);
@@ -568,4 +648,23 @@ private async releaseMilestonePayment(orderId: string, milestoneId: string): Pro
     });
      console.log("[EscrowManager] Cleanup complete.");
  }
+
+    // --- NEW: Voting Method ---
+    async voteForRepresentative(orderId: string, voterId: string, candidateId: string): Promise<void> {
+         const voter = await this.userService.getUser(voterId);
+         if (!voter) throw new Error(`Voter ${voterId} not found.`);
+         // Basic checks done in service, add any manager-level checks if needed (e.g., order status)
+
+         const { order, voteResult } = await this.orderService.voteForRepresentative(orderId, voterId, candidateId);
+
+         // Emit event only if representative actually changed
+         if (voteResult.changed && voteResult.newRepresentativeId) {
+             this.emit(EscrowEvents.GROUP_ORDER_REPRESENTATIVE_CHANGED, {
+                orderId,
+                oldRepresentativeId: order.representativeId, // Note: order object from service might already have new ID
+                newRepresentativeId: voteResult.newRepresentativeId
+             });
+         }
+    }
+    // --- END NEW METHOD ---
 }

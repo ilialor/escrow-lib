@@ -1,7 +1,7 @@
-import {
+import { EscrowManager } from './src/escrow-manager'; // Import class directly
+import { // Import types/enums separately
     ActStatus,
     EscrowEvents,
-    EscrowManager, // Generic type still useful
     IAct,
     IDeliverableDocument,
     IDocument,
@@ -9,12 +9,12 @@ import {
     IDoRDocument,
     IOrder,
     IRoadmapDocument,
-    IUser, // If needed for type guards
+    IUser,
     IValidationResult,
-    MilestoneStatus, // Import enums directly
+    MilestoneStatus,
     OrderStatus,
     UserType
-} from './src'; // Import from the source directory of your library project
+} from './src'; // Keep using barrel file for types/enums
 // Removed uuid import as it's not directly used here
 
 // --- Main Application Logic ---
@@ -136,7 +136,7 @@ async function runDemo() {
         console.log(`Depositing funds to customer ${customer.name}...`);
         await escrowManager.depositToUser(customer.id, orderTotalAmount + 500); // Deposit enough funds
         console.log(`Funding order ${order.id} fully...`);
-        order = await escrowManager.fundOrder(order.id, customer.id, orderTotalAmount); // Fund the full amount
+        order = await escrowManager.contributeFunds(order.id, customer.id, orderTotalAmount);
 
 
         // --- Assign Contractor ---
@@ -277,6 +277,86 @@ async function runDemo() {
              console.warn("Skipping auto-sign test: Could not find second milestone/phase ID.");
          }
 
+
+        // --- Group Order Scenario ---
+        console.log("\n--- 11. Group Order Scenario ---");
+        const custA = await escrowManager.createUser('GroupCust A', UserType.CUSTOMER);
+        const custB = await escrowManager.createUser('GroupCust B', UserType.CUSTOMER);
+        const custC = await escrowManager.createUser('GroupCust C', UserType.CUSTOMER);
+        const groupContractor = await escrowManager.createUser('Group Contractor', UserType.CONTRACTOR);
+
+        // Create group order (CustA is initial representative by default)
+        const groupOrderMilestones = [
+            { description: 'Group Task 1', amount: '900', deadline: new Date('2025-01-15') },
+            { description: 'Group Task 2', amount: '600', deadline: new Date('2025-02-15') }
+        ];
+        let groupOrder = await escrowManager.createGroupOrder(
+            [custA.id, custB.id, custC.id],
+            'Collaborative Project Omega',
+            'A project funded and managed by multiple customers.',
+            groupOrderMilestones,
+            custA.id // Explicitly set custA as representative
+        );
+        console.log(`Created Group Order ID: ${groupOrder.id}, Representative: ${groupOrder.representativeId}`);
+
+        // Funding the group order (each contributes)
+        console.log(`Funding group order ${groupOrder.id}...`);
+        const totalGroupAmount = groupOrder.totalAmount;
+        const contributionPerCustomer = totalGroupAmount / groupOrder.customerIds.length;
+
+        // Simulate deposits for each customer
+        await escrowManager.depositToUser(custA.id, contributionPerCustomer + 100);
+        await escrowManager.depositToUser(custB.id, contributionPerCustomer + 100);
+        await escrowManager.depositToUser(custC.id, contributionPerCustomer + 100);
+
+        // Each customer contributes their share
+        await escrowManager.contributeFunds(groupOrder.id, custA.id, contributionPerCustomer);
+        console.log(`Customer A contributed ${contributionPerCustomer}. Funded: ${ (await escrowManager.getOrder(groupOrder.id))?.fundedAmount }`);
+        await escrowManager.contributeFunds(groupOrder.id, custB.id, contributionPerCustomer);
+        console.log(`Customer B contributed ${contributionPerCustomer}. Funded: ${ (await escrowManager.getOrder(groupOrder.id))?.fundedAmount }`);
+        await escrowManager.contributeFunds(groupOrder.id, custC.id, contributionPerCustomer);
+        groupOrder = (await escrowManager.getOrder(groupOrder.id))!; // Refresh order state
+        console.log(`Customer C contributed ${contributionPerCustomer}. Final Funded Amount: ${groupOrder.fundedAmount}. Order Status: ${groupOrder.status}`);
+
+        // Assign contractor (must be done by representative - custA)
+        console.log(`Assigning contractor ${groupContractor.id} by representative ${custA.id}...`);
+        groupOrder = await escrowManager.assignContractor(groupOrder.id, groupContractor.id, custA.id);
+        console.log(`Group order status after assignment: ${groupOrder.status}`);
+
+        // Simulate work and deliverable for Group Task 1
+        const groupMilestone1 = groupOrder.milestones[0];
+        console.log(`Simulating deliverable submission for group milestone: ${groupMilestone1.description}`);
+        // We need a roadmap/phase for deliverables, let's skip AI generation and use milestone ID as pseudo-phase for simplicity here
+        const groupDeliverable1 = await escrowManager.submitDeliverable(
+            groupContractor.id,
+            groupOrder.id,
+            groupMilestone1.id, // Using milestone ID as phase ID for this simple demo
+            'Group Task 1 Results',
+            { details: 'Results for the first group task.'}
+        );
+        console.log(`Submitted Deliverable ID: ${groupDeliverable1.id} for Group Milestone: ${groupMilestone1.id}`);
+
+        // Generate Act (by contractor)
+        console.log(`Generating Act for group milestone ${groupMilestone1.id}...`);
+        const groupAct1 = await escrowManager.generateAct(groupOrder.id, groupMilestone1.id, [groupDeliverable1.id], groupContractor.id);
+        console.log(`Generated Act ID: ${groupAct1.id}, Status: ${groupAct1.status}`);
+
+        // Signing the Act
+        console.log('Attempting to sign Act by Contractor...');
+        await escrowManager.signActDocument(groupAct1.id, groupContractor.id);
+        console.log(`Act status after Contractor sign: ${(await escrowManager.getDocument(groupAct1.id) as IAct)?.status}`);
+
+        console.log('Attempting to sign Act by a non-representative customer (custB)...');
+        try {
+            await escrowManager.signActDocument(groupAct1.id, custB.id);
+        } catch (e: any) {
+            console.log(`Successfully caught error (expected): ${e.message}`);
+        }
+
+        console.log(`Attempting to sign Act by the representative (custA)...`);
+        await escrowManager.signActDocument(groupAct1.id, custA.id);
+        console.log(`Act status after Representative sign: ${(await escrowManager.getDocument(groupAct1.id) as IAct)?.status}`);
+        // Payment should trigger via event
 
         console.log("\n--- Demo Finished ---");
 

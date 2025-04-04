@@ -66,7 +66,9 @@ export interface IMilestone {
 
 export interface IOrder {
   id: string;
-  customerId: string;
+  customerIds: string[]; // List of customer IDs participating
+  isGroupOrder: boolean; // Flag to easily identify group orders
+  representativeId?: string; // Optional: ID of the designated representative for group orders
   contractorId?: string; // Assigned later
   title: string;
   description: string;
@@ -75,6 +77,8 @@ export interface IOrder {
   totalAmount: number;
   fundedAmount: number; // Amount currently locked in escrow
   createdAt: Date;
+  // Store votes for representative change
+  votes?: { [candidateId: string]: string[] }; // candidateId -> [voterId1, voterId2...]
   // Group order fields omitted for simplicity
 }
 

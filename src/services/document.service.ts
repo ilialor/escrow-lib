@@ -158,6 +158,32 @@ export class DocumentService {
         if (!doc || doc.type !== DocumentType.ACT_OF_WORK) return null;
         let act = doc as IAct;
 
+        const order = await this.orderService.getOrder(act.orderId);
+        if (!order) {
+             throw new Error(`Order ${act.orderId} not found when signing Act ${actId}.`);
+        }
+
+        let isAllowedToSign = false;
+        if (user.id === order.contractorId) {
+            isAllowedToSign = true; // Contractor can always sign
+        } else if (order.isGroupOrder) {
+            // Group Order: Only the representative can sign for the customer side
+            if (order.representativeId && user.id === order.representativeId) {
+                isAllowedToSign = true;
+            } else {
+                 console.warn(`[DocumentService] User ${userId} is not the representative (${order.representativeId}) for group order ${order.id} and cannot sign Act ${actId}.`);
+            }
+        } else {
+            // Standard Order: Any of the (single) customer IDs can sign
+            if (order.customerIds.includes(user.id)) {
+                isAllowedToSign = true;
+            }
+        }
+
+        if (!isAllowedToSign) {
+             throw new Error(`User ${userId} (Type: ${user.type}) does not have permission to sign Act ${actId} for order ${order.id}.`);
+        }
+
         if (act.status === ActStatus.REJECTED || act.status === ActStatus.COMPLETED) {
             console.warn(`[DocumentService] Cannot sign Act ${actId} in status ${act.status}.`);
             return this.copyDocument(act) as IAct;
@@ -169,18 +195,19 @@ export class DocumentService {
 
         act.signedBy.push({ userId, signedAt: new Date() });
 
-        const order = await this.orderService.getOrder(act.orderId);
-        if (!order) {
-             act.signedBy = act.signedBy.filter(s => s.userId !== userId);
-             throw new Error(`Order ${act.orderId} not found when signing Act ${actId}. Signature reverted.`);
+        // Determine who has signed based on the rules
+        const contractorSigned = act.signedBy.some(s => s.userId === order.contractorId);
+        let customerSideSigned = false;
+        if (order.isGroupOrder) {
+            customerSideSigned = act.signedBy.some(s => s.userId === order.representativeId);
+        } else {
+            // Check if any of the customer IDs (should be only one for standard) signed
+            customerSideSigned = act.signedBy.some(s => order.customerIds.includes(s.userId));
         }
-
-        let contractorSigned = act.signedBy.some(s => s.userId === order?.contractorId);
-        let customerSigned = act.signedBy.some(s => s.userId === order?.customerId);
 
         let newStatus: ActStatus = act.status;
 
-        if (contractorSigned && customerSigned) {
+        if (contractorSigned && customerSideSigned) { // Both sides signed
             newStatus = ActStatus.COMPLETED;
             if (act.autoSignTimeoutHandle) {
                  clearTimeout(act.autoSignTimeoutHandle);
@@ -192,7 +219,7 @@ export class DocumentService {
         } else if (contractorSigned) {
             newStatus = ActStatus.SIGNED_CONTRACTOR;
             await this.orderService.updateMilestoneStatus(act.orderId, act.milestoneId, MilestoneStatus.AWAITING_ACCEPTANCE);
-        } else if (customerSigned) {
+        } else if (customerSideSigned) {
             newStatus = ActStatus.SIGNED_CUSTOMER;
              await this.orderService.updateMilestoneStatus(act.orderId, act.milestoneId, MilestoneStatus.AWAITING_ACCEPTANCE);
         }
@@ -217,8 +244,24 @@ export class DocumentService {
 
          const order = await this.orderService.getOrder(act.orderId);
          if (!order) throw new Error(`Order ${act.orderId} not found.`);
-         if (user.id !== order.customerId && user.type !== UserType.PLATFORM) {
-             throw new Error(`User ${userId} (${user.type}) does not have permission to reject Act ${actId}.`);
+
+         let canReject = false;
+          if (order.isGroupOrder) {
+              // Group Order: Only the representative can reject
+              if (order.representativeId && user.id === order.representativeId) {
+                  canReject = true;
+              } else if (user.type === UserType.PLATFORM) {
+                   canReject = true; // Platform can always reject
+              }
+          } else {
+              // Standard Order: The customer or platform can reject
+              if (order.customerIds.includes(user.id) || user.type === UserType.PLATFORM) {
+                  canReject = true;
+              }
+          }
+
+         if (!canReject) {
+              throw new Error(`User ${userId} (${user.type}) does not have permission to reject Act ${actId} for order ${order.id}. Representative: ${order.representativeId}`);
          }
 
          const oldStatus = act.status;

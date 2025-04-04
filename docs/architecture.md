@@ -7,10 +7,10 @@ This library utilizes a modular architecture with the Facade pattern.
 *   **`src/escrow-manager.ts` (Facade):** The main entry point for interacting with the library. It coordinates actions across different services.
 *   **`src/services/` (Service Layer):** Contains the core business logic, separated by domain:
     *   `UserService`: Manages user creation, retrieval, and balance operations.
-    *   `OrderService`: Handles order creation, assignment, funding, etc.
+    *   `OrderService`: Handles order creation, assignment, funding, representative voting etc.
     *   `DocumentService`: Manages document lifecycle (creation, approval, submission).
     *   `AIService` (Optional): Integrates with AI for document generation/validation.
-*   **`src/interfaces/` (Interfaces):** Defines the data structures (contracts) used throughout the library. Key interfaces (`IUser`, `IOrder`, `IDocument`) are defined in `base.ts`.
+*   **`src/interfaces/` (Interfaces):** Defines the data structures (contracts) used throughout the library. Key interfaces (`IUser`, `IOrder`, `IDocument`) are defined in `base.ts`. `IOrder` now includes `customerIds`, `isGroupOrder`, `representativeId`, and `votes` fields to support group orders.
 *   **`src/utils/` (Utilities):** Shared constants and helper functions.
 *   **`src/index.ts` (Entry Point):** Exports the public API of the library.
 

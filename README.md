@@ -378,3 +378,13 @@ escrowManager.on('act:signed', data => {
 ## Лицензия
 
 MIT 
+
+*   `createGroupOrder(customerIds: string[], title: string, description: string, milestones: { description: string; amount: string; deadline?: Date }[], initialRepresentativeId?: string): Promise<IOrder>`
+*   `getOrder(orderId: string): Promise<IOrder | null>`
+*   `assignContractor(orderId: string, contractorId: string, assignerUserId: string): Promise<IOrder>`
+*   `contributeFunds(orderId: string, contributingUserId: string, amount: number): Promise<IOrder>`
+*   `voteForRepresentative(orderId: string, voterId: string, candidateId: string): Promise<void>` (Group Orders only)
+
+*Document Management*
+
+*   **Note:** In Group Orders, signing Acts (`signActDocument`) and rejecting Acts (`rejectAct`) on the customer side must be performed by the designated representative.

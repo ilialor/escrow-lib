@@ -65,7 +65,7 @@ export class OrderService {
 
     const newOrder: IOrder = {
       id: orderId,
-      customerId,
+      customerIds: [customerId],
       title,
       description,
       milestones,
@@ -74,6 +74,7 @@ export class OrderService {
       fundedAmount: 0,
       createdAt: new Date(),
       contractorId: undefined,
+      isGroupOrder: false
     };
 
     this.orders.set(newOrder.id, newOrder);
@@ -89,7 +90,7 @@ export class OrderService {
   async findOrdersByUserId(userId: string): Promise<IOrder[]> {
       const userOrders: IOrder[] = [];
       this.orders.forEach(order => {
-          if (order.customerId === userId || order.contractorId === userId) {
+          if ((order.customerIds && order.customerIds.includes(userId)) || order.contractorId === userId) {
               userOrders.push({ ...order, milestones: [...order.milestones] });
           }
       });
@@ -100,7 +101,7 @@ export class OrderService {
       const order = this.orders.get(orderId);
       if (!order) throw new Error(`Order ${orderId} not found.`);
       // Basic permission check: only customer or platform can assign
-      if (assigningUser.id !== order.customerId && assigningUser.type !== UserType.PLATFORM) {
+      if (!order.customerIds.includes(assigningUser.id) && assigningUser.type !== UserType.PLATFORM) {
           throw new Error(`User ${assigningUser.id} does not have permission to assign a contractor to order ${orderId}.`);
       }
        if (order.contractorId) {
@@ -122,7 +123,7 @@ export class OrderService {
       return { ...order, milestones: [...order.milestones] };
   }
 
-  async fundOrder(orderId: string, amount: number): Promise<{ order: IOrder, newFundedAmount: number }> {
+  async fundOrder(orderId: string, contributingCustomerId: string, amount: number): Promise<{ order: IOrder, newFundedAmount: number }> {
        if (amount <= 0) throw new Error('Funding amount must be positive.');
        const order = this.orders.get(orderId);
        if (!order) throw new Error(`Order ${orderId} not found.`);
@@ -210,5 +211,111 @@ export class OrderService {
        // Potentially deduct from fundedAmount if tracking escrow release here
        return { ...milestone };
    }
+
+   // --- NEW METHOD for Group Orders ---
+   async createGroupOrder(
+       customerIds: string[],
+       title: string,
+       description: string,
+       milestoneData: IMilestoneInputData[],
+       // Assign first customer as initial representative by default
+       initialRepresentativeId?: string
+   ): Promise<IOrder> {
+       if (!customerIds || customerIds.length < 2) {
+           throw new Error('Group orders require at least two customer IDs.');
+       }
+       if (!title || milestoneData.length === 0) {
+           throw new Error('Title and at least one milestone are required.');
+       }
+       // Validate initialRepresentativeId is one of the customers
+       const representative = initialRepresentativeId ?? customerIds[0]; // Default to first customer
+       if (!customerIds.includes(representative)) {
+           throw new Error(`Initial representative ID ${representative} is not in the list of customer IDs.`);
+       }
+
+
+       const orderId = uuidv4();
+       let totalAmount = 0;
+       const milestones: IMilestone[] = [];
+
+       milestoneData.forEach((m) => {
+           const amount = Number(m.amount) || 0;
+           totalAmount += amount;
+           const deadlineDate = typeof m.deadline === 'string' ? new Date(m.deadline) : m.deadline;
+           if (isNaN(deadlineDate.getTime())) {
+                throw new Error(`Invalid deadline format provided: ${m.deadline}`);
+           }
+           milestones.push(createMilestone(orderId, { ...m, amount, deadline: deadlineDate }));
+       });
+
+       const newGroupOrder: IOrder = {
+           id: orderId,
+           customerIds, // Store all customer IDs
+           isGroupOrder: true, // Mark as group order
+           representativeId: representative, // Assign initial representative
+           title,
+           description,
+           milestones,
+           status: OrderStatus.CREATED,
+           totalAmount,
+           fundedAmount: 0,
+           createdAt: new Date(),
+           contractorId: undefined,
+       };
+
+       this.orders.set(newGroupOrder.id, newGroupOrder);
+       console.log(`[OrderService] Created GROUP order: "${title}", ID: ${newGroupOrder.id} with ${customerIds.length} customers. Representative: ${representative}`);
+       return { ...newGroupOrder, milestones: [...newGroupOrder.milestones] };
+   }
+   // --- END NEW METHOD ---
+
+   // --- NEW: Voting for Representative ---
+   async voteForRepresentative(orderId: string, voterId: string, candidateId: string): Promise<{order: IOrder, voteResult: {changed: boolean, newRepresentativeId?: string}}> {
+       const order = this.orders.get(orderId);
+       if (!order) throw new Error(`Order ${orderId} not found.`);
+       if (!order.isGroupOrder) throw new Error(`Order ${orderId} is not a group order.`);
+       if (!order.customerIds.includes(voterId)) throw new Error(`User ${voterId} is not a customer in this group order.`);
+       if (!order.customerIds.includes(candidateId)) throw new Error(`Candidate ${candidateId} is not a customer in this group order.`);
+
+       if (!order.votes) {
+           order.votes = {};
+       }
+
+       // Remove previous vote from this voter if any
+       for (const candId in order.votes) {
+           order.votes[candId] = order.votes[candId].filter(id => id !== voterId);
+       }
+
+       // Add new vote
+       if (!order.votes[candidateId]) {
+           order.votes[candidateId] = [];
+       }
+       order.votes[candidateId].push(voterId);
+       console.log(`[OrderService] User ${voterId} voted for ${candidateId} as representative in order ${orderId}. Votes:`, JSON.stringify(order.votes));
+
+       // Check if candidate has majority
+       const requiredVotes = Math.floor(order.customerIds.length / 2) + 1;
+       const candidateVotes = order.votes[candidateId].length;
+
+       let changed = false;
+       if (candidateVotes >= requiredVotes) {
+           if (order.representativeId !== candidateId) {
+               const oldRepresentativeId = order.representativeId;
+               order.representativeId = candidateId;
+               order.votes = {}; // Clear votes after successful change
+               changed = true;
+               console.log(`[OrderService] Representative for order ${orderId} changed from ${oldRepresentativeId} to ${candidateId}. Votes reset.`);
+                // EscrowManager will emit the event
+           } else {
+                console.log(`[OrderService] Candidate ${candidateId} already has majority and is the current representative for order ${orderId}.`);
+           }
+       }
+
+       return {
+            order: { ...order, milestones: [...order.milestones] },
+            voteResult: { changed, newRepresentativeId: changed ? order.representativeId : undefined }
+       };
+   }
+   // --- END NEW METHOD ---
 
 }
