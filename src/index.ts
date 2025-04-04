@@ -1,16 +1,12 @@
-// Re-export models
-export * from './models';
+// Export the main facade
+export { EscrowManager } from './escrow-manager';
 
-// Re-export interfaces
-export * from './interfaces/base';
-export * from './interfaces/services';
-
-// Re-export utils
+// Export all interfaces, types, and enums needed by the consumer
+export * from './interfaces';
 export * from './utils/constants';
 
-// Re-export main manager
-export * from './escrow-manager';
+// Potentially export service interfaces if defined and needed for advanced use/mocking
+// export * from './interfaces/services'; // If you create service interfaces
 
-// Default export
-import { EscrowManager } from './escrow-manager';
-export default EscrowManager; 
+// Export specific input types if helpful for consumers
+export type { IMilestoneInputData } from './services/order.service';
