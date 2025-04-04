@@ -145,7 +145,83 @@ async function main() {
 
 main();
 
-## RU
+### Development Setup
+To set up the library for local development or contribution:
+#### Clone the repository:
+git clone https://github.com/your-username/escrow-lib.git
+cd escrow-lib
+
+#### Install dependencies:
+npm install
+
+#### Build the library: (Compiles TypeScript to JavaScript in /dist)
+npm run build
+
+#### Running Tests
+(Note: Tests need to be implemented for comprehensive coverage).
+To run the test suite (using Jest, assuming jest.config.js is configured):
+```
+npm test
+```
+
+#### Running the Demo
+A demo script (main.ts) is included to showcase the library's functionality. To run it:
+Make sure you have installed dependencies (npm install).
+
+Execute using ts-node:
+npx ts-node main.ts
+
+(This command compiles and runs the main.ts script directly, using the library's TypeScript source from ./src)
+
+## Events
+The EscrowManager extends EventEmitter and emits events for various state changes. Subscribe using the .on() method.
+Key Events (See src/utils/constants.ts for full list and payloads):
+```
+EscrowEvents.USER_CREATED
+EscrowEvents.ORDER_CREATED
+EscrowEvents.ORDER_FUNDED
+EscrowEvents.ORDER_CONTRACTOR_ASSIGNED
+EscrowEvents.ORDER_STATUS_CHANGED
+EscrowEvents.ORDER_COMPLETED
+EscrowEvents.MILESTONE_STATUS_CHANGED
+EscrowEvents.MILESTONE_PAID
+EscrowEvents.DOCUMENT_CREATED
+EscrowEvents.DOR_GENERATED / ROADMAP_GENERATED / DOD_GENERATED
+EscrowEvents.DELIVERABLE_SUBMITTED
+EscrowEvents.DELIVERABLE_VALIDATED
+EscrowEvents.ACT_CREATED
+EscrowEvents.ACT_SIGNED
+EscrowEvents.ACT_REJECTED
+EscrowEvents.ACT_COMPLETED
+```
+
+Example:
+```
+import { EscrowManager, EscrowEvents, IOrder } from './src'; // Or 'escrow-lib' if linked/installed
+
+const manager = new EscrowManager();
+
+manager.on(EscrowEvents.ORDER_CREATED, (order: IOrder) => {
+  console.log(`New order "${order.title}" was created!`);
+});
+
+manager.on(EscrowEvents.MILESTONE_PAID, (data: { orderId: string; milestoneId: string; amount: number }) => {
+  console.log(`Milestone ${data.milestoneId} paid ${data.amount}.`);
+});
+```
+
+
+### Architecture
+The library follows a modular architecture using the Facade pattern (EscrowManager) coordinating actions across various services (UserService, OrderService, DocumentService, AIService) located in src/services/. Interfaces defining data structures are in src/interfaces/. Shared utilities and constants are in src/utils/.
+See docs/architecture.md for more details.
+
+## Contributing
+Contributions are welcome! Please follow standard fork/pull request workflows. Ensure code adheres to the existing style and that any new features include appropriate documentation and tests (when implemented).
+
+## License
+This project is licensed under the ISC License - see the LICENSE file for details (or specify directly, e.g., ISC).
+
+## RU версия
 
 Библиотека для управления эскроу-счетами и групповыми заказами с функциями коммуникации, документооборота и AI-интеграции.
 
